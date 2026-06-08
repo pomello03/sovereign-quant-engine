@@ -1,0 +1,25 @@
+{
+  "strategy_name": "SovereignStrategy",
+  "indicators": [
+    {
+      "name": "rsi",
+      "params": {
+        "period": 14
+      }
+    },
+    {
+      "name": "sma",
+      "params": {
+        "period": 50
+      }
+    }
+  ],
+  "entry_long_conditions": [
+    "rsi < 30",
+    "close > sma"
+  ],
+  "entry_short_conditions": [
+    "rsi > 70",
+    "close < sma"
+  ]
+}

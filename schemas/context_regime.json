@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContextRegime",
+  "type": "object",
+  "properties": {
+    "market_regime": {"type": "string", "enum": ["trending_bullish", "trending_bearish", "ranging", "volatile_choppy"]},
+    "timeframe": {"type": "string"},
+    "trend_strength": {"type": "string", "enum": ["strong", "weak", "neutral"]},
+    "volatility_state": {"type": "string", "enum": ["high", "low", "normal"]}
+  },
+  "required": ["market_regime", "timeframe", "volatility_state"]
+}

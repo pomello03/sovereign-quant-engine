@@ -1,0 +1,25 @@
+{
+  "metrics": {
+    "sharpe_ratio": 1.85,
+    "max_drawdown": -12.4,
+    "total_trades": 42,
+    "profit_factor": 1.45
+  },
+  "constraints": {
+    "max_drawdown_limit_pct": 1.5,
+    "stop_loss_type": "fixed",
+    "stop_loss_value": 0.02,
+    "take_profit_value": 0.04,
+    "risk_to_reward_minimum": 2.0,
+    "max_position_sizing_pct": 2.0
+  },
+  "validation_passed": false,
+  "monte_carlo_results": {
+    "risk_of_ruin": 0.999,
+    "average_max_drawdown": 5.647819723645428,
+    "peak_simulated_drawdown": 17.361009572723987,
+    "num_simulations": 1000,
+    "drawdown_limit_used": 1.5
+  },
+  "validated_at": "2026-06-08T12:51:58.083560Z"
+}

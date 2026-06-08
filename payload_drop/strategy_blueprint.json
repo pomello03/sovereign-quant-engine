@@ -1,0 +1,43 @@
+{
+  "alpha": {
+    "strategy_name": "SovereignStrategy",
+    "indicators": [
+      {
+        "name": "rsi",
+        "params": {
+          "period": 14
+        }
+      },
+      {
+        "name": "sma",
+        "params": {
+          "period": 50
+        }
+      }
+    ],
+    "entry_long_conditions": [
+      "rsi < 30",
+      "close > sma"
+    ],
+    "entry_short_conditions": [
+      "rsi > 70",
+      "close < sma"
+    ]
+  },
+  "risk": {
+    "max_drawdown_limit_pct": 1.5,
+    "stop_loss_type": "fixed",
+    "stop_loss_value": 0.02,
+    "take_profit_value": 0.04,
+    "risk_to_reward_minimum": 2.0,
+    "max_position_sizing_pct": 2.0
+  },
+  "context": {
+    "market_regime": "trending_bullish",
+    "timeframe": "4h",
+    "trend_strength": "strong",
+    "volatility_state": "normal"
+  },
+  "generated_at": "2026-06-08T12:54:10.465351Z",
+  "supervisor_verdict": "APPROVED"
+}
