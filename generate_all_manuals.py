@@ -15,6 +15,7 @@ from generate_deploy_pdf import create_deploy_manual
 from generate_pdf import create_manual
 from generate_pipeline_pdf import create_pipeline_manual
 from generate_effectiveness_pdf import generate_report
+from generate_master_guide import create_master_manual
 
 def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -47,6 +48,11 @@ def main():
     effectiveness_path = os.path.join(docs_dir, "Analisi_Efficacia_Sovereign_Quant_Engine.pdf")
     print(f">> Generating Effectiveness Analysis Report...")
     generate_report(effectiveness_path)
+
+    # 6. Master Guide
+    master_path = os.path.join(docs_dir, "Guida_Master_Completa.pdf")
+    print(f">> Generating Master Operational Guide...")
+    create_master_manual(master_path)
 
     print("\n=== All Manuals Generated Successfully in 'docs/' ===")
 
