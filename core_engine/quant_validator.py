@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import random
 from datetime import datetime, timezone
 from typing import Dict, Any
@@ -51,6 +52,13 @@ class QuantValidator:
         Runs a Monte Carlo simulation of trade returns based on metrics to estimate
         the probability of drawdown exceeding the limit (Risk of Ruin).
         
+        Supports two modes:
+        - Non-Parametric Bootstrap: when metrics contains a non-empty 'trade_returns' list,
+          samples from actual trade returns with replacement.
+        - Parametric Log-Normal Mixture: when no trade_returns are available, generates
+          synthetic returns using separate log-normal distributions for wins and losses,
+          calibrated from the strategy's profit factor and win rate.
+        
         Args:
             metrics: dict of backtest metrics
             num_simulations: number of simulation paths to run
@@ -67,13 +75,23 @@ class QuantValidator:
         if profit_factor <= 0:
             profit_factor = 1.5
             
-        # We model trade outcomes as binary (Win/Loss) with dynamic Win Rate (defaulting to 50%)
         win_rate = metrics.get("win_rate")
         if win_rate is None or not (0.0 < win_rate < 1.0):
             win_rate = 0.50
-            
-        win_return = profit_factor * ((1 - win_rate) / win_rate) * 0.01
-        loss_return = -0.01
+        
+        # Determine simulation mode
+        trade_returns = metrics.get("trade_returns")
+        use_bootstrap = isinstance(trade_returns, list) and len(trade_returns) > 0
+        simulation_mode = "bootstrap" if use_bootstrap else "parametric_lognormal"
+        
+        # Pre-compute log-normal parameters for parametric mode
+        if not use_bootstrap:
+            mean_win = profit_factor * 0.01
+            sigma_win = 0.005
+            mu_win = math.log(mean_win) - 0.5 * sigma_win ** 2
+            mean_loss = 0.01
+            sigma_loss = 0.003
+            mu_loss = math.log(mean_loss) - 0.5 * sigma_loss ** 2
         
         ruin_count = 0
         max_drawdowns = []
@@ -86,19 +104,32 @@ class QuantValidator:
             peak_equity = 100.0
             sim_max_dd = 0.0
             
-            for _ in range(total_trades):
-                if random.random() < win_rate:
-                    trade_return = win_return
-                else:
-                    trade_return = loss_return
-                    
-                equity = equity * (1 + trade_return)
-                if equity > peak_equity:
-                    peak_equity = equity
-                else:
-                    dd = (peak_equity - equity) / peak_equity * 100.0
-                    if dd > sim_max_dd:
-                        sim_max_dd = dd
+            if use_bootstrap:
+                # Non-parametric bootstrap: sample from actual trade returns
+                sim_returns = random.choices(trade_returns, k=total_trades)
+                for trade_return in sim_returns:
+                    equity = equity * (1 + trade_return)
+                    if equity > peak_equity:
+                        peak_equity = equity
+                    else:
+                        dd = (peak_equity - equity) / peak_equity * 100.0
+                        if dd > sim_max_dd:
+                            sim_max_dd = dd
+            else:
+                # Parametric log-normal mixture model
+                for _ in range(total_trades):
+                    if random.random() < win_rate:
+                        trade_return = random.lognormvariate(mu_win, sigma_win)
+                    else:
+                        trade_return = -random.lognormvariate(mu_loss, sigma_loss)
+                        
+                    equity = equity * (1 + trade_return)
+                    if equity > peak_equity:
+                        peak_equity = equity
+                    else:
+                        dd = (peak_equity - equity) / peak_equity * 100.0
+                        if dd > sim_max_dd:
+                            sim_max_dd = dd
                         
             max_drawdowns.append(sim_max_dd)
             if sim_max_dd > drawdown_limit:
@@ -114,7 +145,8 @@ class QuantValidator:
             "peak_simulated_drawdown": peak_simulated_dd,
             "num_simulations": num_simulations,
             "drawdown_limit_used": drawdown_limit,
-            "win_rate_used": win_rate
+            "win_rate_used": win_rate,
+            "simulation_mode": simulation_mode
         }
 
     def generate_report(self, metrics: dict, constraints: dict, num_simulations: int = 100) -> dict:
@@ -171,6 +203,7 @@ class QuantValidator:
         sharpe = f"{metrics.get('sharpe_ratio'):.2f}" if metrics.get("sharpe_ratio") is not None else "N/A"
         max_dd = f"{metrics.get('max_drawdown'):.2f}%" if metrics.get("max_drawdown") is not None else "N/A"
         pf = f"{metrics.get('profit_factor'):.2f}" if metrics.get("profit_factor") is not None else "N/A"
+        pf_float = metrics.get("profit_factor") or 1.5
         trades = metrics.get("total_trades") or 0
         
         limit_dd = f"{constraints.get('max_drawdown_limit_pct'):.2f}%"
@@ -348,7 +381,7 @@ class QuantValidator:
                 
                 <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-xs text-slate-400 space-y-2">
                     <p class="font-semibold text-slate-300">Methodology:</p>
-                    <p>Paths are generated by shuffling historical trade returns modeled under a {win_rate_display} Win Rate and aligned with the backtested Profit Factor of {pf}.</p>
+                    <p>Paths are generated using a Log-Normal Mixture Model under a {win_rate_display} Win Rate and calibrated to a Profit Factor of {pf}. Winning trades follow LN(μ={pf_float * 0.01:.4f}, σ=0.005) and losing trades follow -LN(μ=0.01, σ=0.003).</p>
                 </div>
             </div>
 
@@ -362,8 +395,22 @@ class QuantValidator:
         const numTrades = {trades};
         const profitFactor = parseFloat('{pf}') || 1.5;
         const winRate = parseFloat('{win_rate}') || 0.50;
-        const winReturn = profitFactor * ((1 - winRate) / winRate) * 0.01;
-        const lossReturn = -0.01;
+        
+        // Log-Normal Mixture Model parameters
+        const meanWin = profitFactor * 0.01;
+        const sigmaWin = 0.005;
+        const muWin = Math.log(meanWin) - 0.5 * sigmaWin * sigmaWin;
+        const meanLoss = 0.01;
+        const sigmaLoss = 0.003;
+        const muLoss = Math.log(meanLoss) - 0.5 * sigmaLoss * sigmaLoss;
+        
+        // Box-Muller transform for normal random numbers
+        function randn() {{
+            let u = 0, v = 0;
+            while (u === 0) u = Math.random();
+            while (v === 0) v = Math.random();
+            return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        }}
 
         // Generate 10 sample paths
         const datasets = [];
@@ -382,14 +429,19 @@ class QuantValidator:
 
         const labels = Array.from({{ length: numTrades + 1 }}, (_, i) => i);
 
-        // Generate paths
+        // Generate paths using Log-Normal Mixture
         for (let p = 0; p < 10; p++) {{
             let equity = 100.0;
             const data = [equity];
             for (let t = 0; t < numTrades; t++) {{
                 const isWin = Math.random() < winRate;
-                const r = isWin ? winReturn : lossReturn;
-                equity = equity * (1 + r);
+                let tradeReturn;
+                if (isWin) {{
+                    tradeReturn = Math.exp(muWin + sigmaWin * randn());
+                }} else {{
+                    tradeReturn = -Math.exp(muLoss + sigmaLoss * randn());
+                }}
+                equity = equity * (1 + tradeReturn);
                 data.push(parseFloat(equity.toFixed(2)));
             }}
             

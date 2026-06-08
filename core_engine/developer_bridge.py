@@ -1,5 +1,6 @@
 import os
 import json
+import ast
 from typing import Dict, Any, List
 from core_engine.supervisor import Supervisor
 from core_engine.mcp_executor import MCPJesseRunner
@@ -113,12 +114,14 @@ class DeveloperBridge:
     def _generate_params_content(self, blueprint: dict) -> str:
         alpha = blueprint.get("alpha", {})
         risk = blueprint.get("risk", {})
+        context = blueprint.get("context", {})
+        regime = context.get("market_regime")
         
         indicators_params = {}
         for ind in alpha.get("indicators", []):
             indicators_params[ind["name"]] = ind.get("params", {})
             
-        params_dict = {
+        base_params = {
             "indicators": indicators_params,
             "risk": {
                 "max_drawdown_limit_pct": risk.get("max_drawdown_limit_pct"),
@@ -128,6 +131,14 @@ class DeveloperBridge:
             }
         }
         
+        if regime:
+            params_dict = {
+                "default": base_params,
+                regime: base_params,
+            }
+        else:
+            params_dict = base_params
+        
         import pprint
         formatted_params = pprint.pformat(params_dict, indent=4)
         return (
@@ -136,18 +147,56 @@ class DeveloperBridge:
         )
 
     def _translate_condition(self, condition: str, indicators: list) -> str:
-        import re
-        cond = condition.lower()
+        """Translates a human-readable condition to Python code using AST parsing.
         
-        # Replace 'close' with 'self.price' as a whole word
-        cond = re.sub(r'\bclose\b', 'self.price', cond)
+        Safely rewrites indicator names and 'close' to self.attribute references.
+        Rejects function calls and attribute access to prevent code injection.
         
-        # Replace indicator names with self.indicator_name as a whole word
-        for ind in indicators:
-            ind_name = ind["name"].lower()
-            cond = re.sub(rf'\b{ind_name}\b', f'self.{ind_name}', cond)
+        Args:
+            condition: A string expression like 'rsi < 30'
+            indicators: List of indicator dicts with 'name' keys
             
-        return cond
+        Returns:
+            Translated Python expression string
+            
+        Raises:
+            ValueError: If the condition contains invalid syntax or unsafe constructs
+        """
+        indicator_names = {ind["name"].lower() for ind in indicators}
+        
+        try:
+            tree = ast.parse(condition, mode='eval')
+        except SyntaxError as e:
+            raise ValueError(f"Invalid condition syntax: {condition}") from e
+        
+        class _ConditionTransformer(ast.NodeTransformer):
+            def visit_Name(self, node):
+                name_lower = node.id.lower()
+                if name_lower == 'close':
+                    return ast.Attribute(
+                        value=ast.Name(id='self', ctx=ast.Load()),
+                        attr='price',
+                        ctx=ast.Load()
+                    )
+                if name_lower in indicator_names:
+                    return ast.Attribute(
+                        value=ast.Name(id='self', ctx=ast.Load()),
+                        attr=name_lower,
+                        ctx=ast.Load()
+                    )
+                return node
+            
+            def visit_Call(self, node):
+                raise ValueError(f"Function calls are not allowed in conditions: {ast.dump(node)}")
+            
+            def visit_Attribute(self, node):
+                raise ValueError(f"Attribute access is not allowed in conditions: {ast.dump(node)}")
+        
+        transformer = _ConditionTransformer()
+        new_tree = transformer.visit(tree)
+        ast.fix_missing_locations(new_tree)
+        
+        return ast.unparse(new_tree)
 
     def _generate_init_content(self, blueprint: dict, inject_error: bool = False) -> str:
         if inject_error:
@@ -161,10 +210,12 @@ class DeveloperBridge:
             )
             
         alpha = blueprint.get("alpha", {})
+        context = blueprint.get("context", {})
         strategy_name = alpha.get("strategy_name", "SovereignStrategy")
         long_conditions = alpha.get("entry_long_conditions", [])
         short_conditions = alpha.get("entry_short_conditions", [])
-        
+        regime_value = context.get("market_regime", "default")
+
         long_conds_str = "\n        # ".join(long_conditions)
         short_conds_str = "\n        # ".join(short_conditions)
 
@@ -199,7 +250,13 @@ from .params import params
 
 class SovereignStrategy(Strategy):
     @property
+    def current_regime(self) -> str:
+        return '{regime_value}'
+
+    @property
     def hyperparameters(self):
+        if isinstance(params, dict) and 'default' in params:
+            return params.get(self.current_regime, params.get('default', params))
         return params
 {properties_str}
     def should_long(self) -> bool:

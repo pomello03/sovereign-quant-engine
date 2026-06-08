@@ -71,8 +71,10 @@ def test_generate_strategy_code(temp_dirs, dummy_blueprint):
     assert "@property" in init_content
     assert "def rsi(self)" in init_content
     assert "ta.rsi(self.candles, period=14)" in init_content
-    assert "return self.rsi < 30" in init_content
-    assert "return self.rsi > 70" in init_content
+    assert "self.rsi < 30" in init_content
+    assert "self.rsi > 70" in init_content
+    assert "current_regime" in init_content
+    assert "hyperparameters" in init_content
     
     # Verify params.py content
     with open(strategy_dir / "params.py", "r", encoding="utf-8") as f:
@@ -187,3 +189,103 @@ def test_execute_closed_loop_max_retries_reached(temp_dirs, dummy_blueprint):
     assert result["attempts"][1]["status"] == "COMPILATION_ERROR"
     assert result["attempts"][2]["status"] == "COMPILATION_ERROR"
     assert mock_runner.run_backtest.call_count == 3
+
+
+# --- AST Condition Parser Tests ---
+
+def test_ast_condition_simple(temp_dirs):
+    payload_dir, workspace_dir = temp_dirs
+    bridge = DeveloperBridge(
+        payload_drop_dir=str(payload_dir),
+        workspace_path=str(workspace_dir)
+    )
+    indicators = [{"name": "RSI", "params": {"period": 14}}]
+    result = bridge._translate_condition("RSI < 30", indicators)
+    assert result == "self.rsi < 30"
+
+
+def test_ast_condition_complex(temp_dirs):
+    payload_dir, workspace_dir = temp_dirs
+    bridge = DeveloperBridge(
+        payload_drop_dir=str(payload_dir),
+        workspace_path=str(workspace_dir)
+    )
+    indicators = [
+        {"name": "RSI", "params": {"period": 14}},
+        {"name": "SMA", "params": {"period": 50}}
+    ]
+    result = bridge._translate_condition("RSI < 30 and close > SMA", indicators)
+    assert result == "self.rsi < 30 and self.price > self.sma"
+
+
+def test_ast_condition_rejects_function_call(temp_dirs):
+    payload_dir, workspace_dir = temp_dirs
+    bridge = DeveloperBridge(
+        payload_drop_dir=str(payload_dir),
+        workspace_path=str(workspace_dir)
+    )
+    indicators = [{"name": "RSI", "params": {"period": 14}}]
+    with pytest.raises(ValueError, match="Function calls are not allowed"):
+        bridge._translate_condition('__import__("os")', indicators)
+
+
+def test_ast_condition_rejects_attribute_access(temp_dirs):
+    payload_dir, workspace_dir = temp_dirs
+    bridge = DeveloperBridge(
+        payload_drop_dir=str(payload_dir),
+        workspace_path=str(workspace_dir)
+    )
+    indicators = [{"name": "RSI", "params": {"period": 14}}]
+    # os.system(...) is first caught as a Call node, so test pure attribute access
+    with pytest.raises(ValueError, match="Attribute access is not allowed"):
+        bridge._translate_condition('os.path', indicators)
+
+
+def test_ast_condition_invalid_syntax(temp_dirs):
+    payload_dir, workspace_dir = temp_dirs
+    bridge = DeveloperBridge(
+        payload_drop_dir=str(payload_dir),
+        workspace_path=str(workspace_dir)
+    )
+    indicators = [{"name": "RSI", "params": {"period": 14}}]
+    with pytest.raises(ValueError, match="Invalid condition syntax"):
+        bridge._translate_condition("RSI <>", indicators)
+
+
+# --- Regime-Switching Tests ---
+
+def test_regime_switching_params(temp_dirs, dummy_blueprint):
+    payload_dir, workspace_dir = temp_dirs
+    bridge = DeveloperBridge(
+        payload_drop_dir=str(payload_dir),
+        workspace_path=str(workspace_dir)
+    )
+    
+    bridge.generate_strategy_code(dummy_blueprint)
+    
+    strategy_dir = workspace_dir / "strategies" / "SovereignStrategy"
+    with open(strategy_dir / "params.py", "r", encoding="utf-8") as f:
+        params_content = f.read()
+    
+    # Blueprint has context.market_regime = 'trending_bullish'
+    assert "'default'" in params_content
+    assert "'trending_bullish'" in params_content
+
+
+def test_regime_switching_init(temp_dirs, dummy_blueprint):
+    payload_dir, workspace_dir = temp_dirs
+    bridge = DeveloperBridge(
+        payload_drop_dir=str(payload_dir),
+        workspace_path=str(workspace_dir)
+    )
+    
+    bridge.generate_strategy_code(dummy_blueprint)
+    
+    strategy_dir = workspace_dir / "strategies" / "SovereignStrategy"
+    with open(strategy_dir / "__init__.py", "r", encoding="utf-8") as f:
+        init_content = f.read()
+    
+    assert "def current_regime(self)" in init_content
+    assert "'trending_bullish'" in init_content
+    assert "def hyperparameters(self)" in init_content
+    assert "'default' in params" in init_content

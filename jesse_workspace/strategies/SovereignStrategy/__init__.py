@@ -6,7 +6,13 @@ from .params import params
 
 class SovereignStrategy(Strategy):
     @property
+    def current_regime(self) -> str:
+        return 'trending_bullish'
+
+    @property
     def hyperparameters(self):
+        if isinstance(params, dict) and 'default' in params:
+            return params.get(self.current_regime, params.get('default', params))
         return params
     @property
     def rsi(self) -> float:

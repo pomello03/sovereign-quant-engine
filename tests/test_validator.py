@@ -120,3 +120,65 @@ def test_generate_report(temp_payload_dir):
     with open(report_file, "r", encoding="utf-8") as f:
         loaded_report = json.load(f)
     assert loaded_report == report
+
+
+def test_run_monte_carlo_bootstrap():
+    """Test non-parametric bootstrap mode when trade_returns are provided."""
+    validator = QuantValidator()
+    metrics = {
+        "sharpe_ratio": 1.8,
+        "max_drawdown": -1.2,
+        "profit_factor": 1.5,
+        "total_trades": 30,
+        "win_rate": 0.60,
+        "trade_returns": [0.02, -0.01, 0.015, -0.008, 0.025, -0.012, 0.018, -0.005, 0.03, -0.01]
+    }
+    
+    mc_results = validator.run_monte_carlo(metrics, num_simulations=50, drawdown_limit=1.5)
+    
+    assert mc_results["simulation_mode"] == "bootstrap"
+    assert "risk_of_ruin" in mc_results
+    assert "average_max_drawdown" in mc_results
+    assert "peak_simulated_drawdown" in mc_results
+    assert mc_results["num_simulations"] == 50
+    assert 0.0 <= mc_results["risk_of_ruin"] <= 1.0
+    assert mc_results["average_max_drawdown"] >= 0.0
+
+
+def test_run_monte_carlo_parametric():
+    """Test parametric log-normal mixture mode when no trade_returns are available."""
+    validator = QuantValidator()
+    metrics = {
+        "sharpe_ratio": 1.8,
+        "max_drawdown": -1.2,
+        "profit_factor": 1.5,
+        "total_trades": 50,
+        "win_rate": 0.60
+    }
+    
+    mc_results = validator.run_monte_carlo(metrics, num_simulations=50, drawdown_limit=1.5)
+    
+    assert mc_results["simulation_mode"] == "parametric_lognormal"
+    assert "risk_of_ruin" in mc_results
+    assert mc_results["num_simulations"] == 50
+    assert mc_results["win_rate_used"] == 0.60
+    assert 0.0 <= mc_results["risk_of_ruin"] <= 1.0
+
+
+def test_run_monte_carlo_empty_trade_returns():
+    """Test fallback to parametric mode when trade_returns is empty list."""
+    validator = QuantValidator()
+    metrics = {
+        "sharpe_ratio": 1.8,
+        "max_drawdown": -1.2,
+        "profit_factor": 1.5,
+        "total_trades": 50,
+        "win_rate": 0.60,
+        "trade_returns": []
+    }
+    
+    mc_results = validator.run_monte_carlo(metrics, num_simulations=50, drawdown_limit=1.5)
+    
+    assert mc_results["simulation_mode"] == "parametric_lognormal"
+    assert "risk_of_ruin" in mc_results
+    assert 0.0 <= mc_results["risk_of_ruin"] <= 1.0
