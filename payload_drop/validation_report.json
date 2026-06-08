@@ -3,7 +3,8 @@
     "sharpe_ratio": 1.85,
     "max_drawdown": -12.4,
     "total_trades": 42,
-    "profit_factor": 1.45
+    "profit_factor": 1.45,
+    "win_rate": 0.55
   },
   "constraints": {
     "max_drawdown_limit_pct": 1.5,
@@ -15,11 +16,12 @@
   },
   "validation_passed": false,
   "monte_carlo_results": {
-    "risk_of_ruin": 0.999,
-    "average_max_drawdown": 5.647819723645428,
-    "peak_simulated_drawdown": 17.361009572723987,
+    "risk_of_ruin": 0.998,
+    "average_max_drawdown": 5.180424006673622,
+    "peak_simulated_drawdown": 17.060510232801136,
     "num_simulations": 1000,
-    "drawdown_limit_used": 1.5
+    "drawdown_limit_used": 1.5,
+    "win_rate_used": 0.55
   },
-  "validated_at": "2026-06-08T12:51:58.083560Z"
+  "validated_at": "2026-06-08T13:20:23.872508Z"
 }

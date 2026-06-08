@@ -39,7 +39,8 @@ class MCPJesseRunner:
             "sharpe_ratio": 1.85,
             "max_drawdown": -12.4,
             "total_trades": 42,
-            "profit_factor": 1.45
+            "profit_factor": 1.45,
+            "win_rate": 0.55
         }
 
         if not jesse_installed:
@@ -152,7 +153,7 @@ class MCPJesseRunner:
     def _parse_jesse_output(self, stdout_text: str) -> Dict[str, Any]:
         """
         Parses Jesse backtest stdout report to extract key metrics.
-        Looks for: Sharpe Ratio, Max Drawdown, Total Trades, Profit Factor.
+        Looks for: Sharpe Ratio, Max Drawdown, Total Trades, Profit Factor, Win Rate.
         
         Args:
             stdout_text: stdout from Jesse run
@@ -164,7 +165,8 @@ class MCPJesseRunner:
             "sharpe_ratio": None,
             "max_drawdown": None,
             "total_trades": None,
-            "profit_factor": None
+            "profit_factor": None,
+            "win_rate": None
         }
         
         if not stdout_text:
@@ -219,6 +221,18 @@ class MCPJesseRunner:
                 except ValueError:
                     pass
 
+        if metrics["win_rate"] is None:
+            match = re.search(r"win\s+rate[^\n]*?\s*(\d+\.?\d*)%?", stdout_text, re.IGNORECASE)
+            if match:
+                try:
+                    val_float = float(match.group(1))
+                    if val_float > 1.0:
+                        metrics["win_rate"] = val_float / 100.0
+                    else:
+                        metrics["win_rate"] = val_float
+                except ValueError:
+                    pass
+
         return metrics
 
     def _extract_metric_from_key_val(self, key: str, val: str, metrics: Dict[str, Any]):
@@ -245,5 +259,15 @@ class MCPJesseRunner:
         elif "profit factor" in key:
             try:
                 metrics["profit_factor"] = float(clean_val)
+            except ValueError:
+                pass
+        elif "win rate" in key:
+            try:
+                is_percent = "%" in val
+                val_float = float(clean_val)
+                if is_percent or val_float > 1.0:
+                    metrics["win_rate"] = val_float / 100.0
+                else:
+                    metrics["win_rate"] = val_float
             except ValueError:
                 pass

@@ -18,6 +18,7 @@ def test_parse_jesse_output_table():
     sharpe ratio             | 1.84
     profit factor            | 1.56
     max drawdown             | -4.50%
+    win rate                 | 55.0%
     --------------------------------------------------
     """
     metrics = runner._parse_jesse_output(stdout_text)
@@ -25,6 +26,7 @@ def test_parse_jesse_output_table():
     assert metrics["max_drawdown"] == -4.50
     assert metrics["total_trades"] == 24
     assert metrics["profit_factor"] == 1.56
+    assert metrics["win_rate"] == 0.55
 
 def test_parse_jesse_output_colon():
     runner = MCPJesseRunner("./jesse_workspace")
@@ -35,12 +37,14 @@ def test_parse_jesse_output_colon():
     sharpe ratio: 2.1
     profit factor: 1.8
     max drawdown: -3.2
+    win rate: 0.60
     """
     metrics = runner._parse_jesse_output(stdout_text)
     assert metrics["sharpe_ratio"] == 2.1
     assert metrics["max_drawdown"] == -3.2
     assert metrics["total_trades"] == 15
     assert metrics["profit_factor"] == 1.8
+    assert metrics["win_rate"] == 0.60
 
 def test_parse_jesse_output_regex_fallback():
     runner = MCPJesseRunner("./jesse_workspace")
@@ -50,12 +54,14 @@ def test_parse_jesse_output_regex_fallback():
     Total trades completed: 100.
     Maximum drawdown was calculated as -8.5%.
     Profit factor is 2.0.
+    Win rate achieved: 58%.
     """
     metrics = runner._parse_jesse_output(stdout_text)
     assert metrics["sharpe_ratio"] == 2.5
     assert metrics["max_drawdown"] == -8.5
     assert metrics["total_trades"] == 100
     assert metrics["profit_factor"] == 2.0
+    assert metrics["win_rate"] == 0.58
 
 @patch("shutil.which", return_value=None)
 def test_run_backtest_jesse_not_installed(mock_which):

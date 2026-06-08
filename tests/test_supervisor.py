@@ -140,3 +140,28 @@ def test_supervisor_missing_file(temp_payload_dir, valid_payloads):
     supervisor = Supervisor(schemas_dir=REAL_SCHEMAS_DIR, payload_drop_dir=str(temp_payload_dir))
     with pytest.raises(FileNotFoundError):
         supervisor.validate_and_generate()
+
+def test_supervisor_risk_to_reward_violation(temp_payload_dir, valid_payloads):
+    alpha, risk, context = valid_payloads
+    # stop_loss = 0.02, take_profit = 0.03, min_rr = 2.0. Actual RR = 1.5 (below 2.0)
+    risk["stop_loss_value"] = 0.02
+    risk["take_profit_value"] = 0.03
+    risk["risk_to_reward_minimum"] = 2.0
+    write_payload_files(temp_payload_dir, alpha, risk, context)
+    
+    supervisor = Supervisor(schemas_dir=REAL_SCHEMAS_DIR, payload_drop_dir=str(temp_payload_dir))
+    with pytest.raises(ValidationError) as excinfo:
+        supervisor.validate_and_generate()
+    assert "Actual Risk-to-Reward ratio" in str(excinfo.value)
+
+def test_supervisor_risk_to_reward_success(temp_payload_dir, valid_payloads):
+    alpha, risk, context = valid_payloads
+    # stop_loss = 0.02, take_profit = 0.05, min_rr = 2.0. Actual RR = 2.5 (above 2.0)
+    risk["stop_loss_value"] = 0.02
+    risk["take_profit_value"] = 0.05
+    risk["risk_to_reward_minimum"] = 2.0
+    write_payload_files(temp_payload_dir, alpha, risk, context)
+    
+    supervisor = Supervisor(schemas_dir=REAL_SCHEMAS_DIR, payload_drop_dir=str(temp_payload_dir))
+    blueprint = supervisor.validate_and_generate()
+    assert blueprint["supervisor_verdict"] == "APPROVED"

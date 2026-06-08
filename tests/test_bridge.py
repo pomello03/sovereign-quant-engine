@@ -68,6 +68,11 @@ def test_generate_strategy_code(temp_dirs, dummy_blueprint):
         init_content = f.read()
     assert "class SovereignStrategy(Strategy):" in init_content
     assert "TestSovereignStrategy" in init_content
+    assert "@property" in init_content
+    assert "def rsi(self)" in init_content
+    assert "ta.rsi(self.candles, period=14)" in init_content
+    assert "return self.rsi < 30" in init_content
+    assert "return self.rsi > 70" in init_content
     
     # Verify params.py content
     with open(strategy_dir / "params.py", "r", encoding="utf-8") as f:

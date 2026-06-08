@@ -76,7 +76,8 @@ def test_run_monte_carlo():
         "sharpe_ratio": 1.8,
         "max_drawdown": -1.2,
         "profit_factor": 1.5,
-        "total_trades": 50
+        "total_trades": 50,
+        "win_rate": 0.60
     }
     
     mc_results = validator.run_monte_carlo(metrics, num_simulations=100, drawdown_limit=1.5)
@@ -86,6 +87,7 @@ def test_run_monte_carlo():
     assert "peak_simulated_drawdown" in mc_results
     assert mc_results["num_simulations"] == 100
     assert mc_results["drawdown_limit_used"] == 1.5
+    assert mc_results["win_rate_used"] == 0.60
     assert 0.0 <= mc_results["risk_of_ruin"] <= 1.0
     assert mc_results["average_max_drawdown"] >= 0.0
 

@@ -8,18 +8,25 @@ class SovereignStrategy(Strategy):
     @property
     def hyperparameters(self):
         return params
+    @property
+    def rsi(self) -> float:
+        return ta.rsi(self.candles, period=14)
+
+    @property
+    def sma(self) -> float:
+        return ta.sma(self.candles, period=50)
 
     def should_long(self) -> bool:
         # Long entry conditions:
         # rsi < 30
         # close > sma
-        return True
+        return self.rsi < 30 and self.price > self.sma
 
     def should_short(self) -> bool:
         # Short entry conditions:
         # rsi > 70
         # close < sma
-        return False
+        return self.rsi > 70 and self.price < self.sma
 
     def should_cancel_entry(self) -> bool:
         return True

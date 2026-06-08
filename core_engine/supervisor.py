@@ -102,6 +102,22 @@ class Supervisor:
                 f"Ruin Bias Violation: max_drawdown_limit_pct ({max_dd}) exceeds maximum allowed 2.0%"
             )
 
+        # Cross-validation: check that take_profit_value / stop_loss_value >= risk_to_reward_minimum
+        tp = risk_data.get("take_profit_value")
+        sl = risk_data.get("stop_loss_value")
+        min_rr = risk_data.get("risk_to_reward_minimum")
+        
+        if tp is not None and sl is not None and min_rr is not None:
+            if sl == 0:
+                raise ValidationError("Risk constraints validation error: stop_loss_value cannot be zero")
+            actual_rr = tp / sl
+            if actual_rr < min_rr:
+                raise ValidationError(
+                    f"Risk constraints validation error: Actual Risk-to-Reward ratio ({actual_rr:.2f}) "
+                    f"is less than the required minimum ({min_rr:.2f}). "
+                    f"Take Profit ({tp}) / Stop Loss ({sl}) = {actual_rr:.2f}"
+                )
+
         # Build approved blueprint
         blueprint = {
             "alpha": alpha_data,
