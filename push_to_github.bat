@@ -74,8 +74,24 @@ echo.
 set /p confirm="Do you want to push now? (Y/N): "
 if /i "%confirm%"=="Y" (
     %GIT_CMD% push -u origin main
+    if %errorlevel% neq 0 (
+        echo.
+        echo =============================================================
+        echo [ERROR] Push fallito! Questo accade di solito per due motivi:
+        echo.
+        echo 1. Non hai ancora creato la repository vuota su GitHub.
+        echo    Soluzione: vai su https://github.com/new e crea una repository
+        echo    chiamata 'sovereign-quant-engine' (lasciala vuota, senza README/gitignore).
+        echo.
+        echo 2. La repo e privata e le credenziali salvate nel PC sono errate o scadute.
+        echo    Soluzione: puoi autenticarti usando un Personal Access Token (PAT)
+        echo    generato su GitHub (Developer Settings -> Personal Access Tokens)
+        echo    ed eseguendo manualmente il push con il comando:
+        echo    %GIT_CMD% push https://IL_TUO_TOKEN_PAT@github.com/pomello03/sovereign-quant-engine.git main
+        echo =============================================================
+    )
 ) else (
-    echo Push aborted. You can run '%GIT_CMD% push origin main' manually.
+    echo Push abortito. Puoi lanciare '%GIT_CMD% push origin main' manualmente.
 )
 
 pause
