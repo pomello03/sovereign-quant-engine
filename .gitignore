@@ -25,3 +25,7 @@ jesse_workspace/.env
 # Windows OS files
 Thumbs.db
 Desktop.ini
+
+# Virtual Environment
+venv/
+.venv/
