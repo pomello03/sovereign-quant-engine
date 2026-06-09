@@ -4,7 +4,7 @@ params = {
         "indicators": {"rsi": {"period": 14}, "sma": {"period": 50}},
         "risk": {
             "max_drawdown_limit_pct": 1.5,
-            "max_position_sizing_pct": 0.25,
+            "max_position_sizing_pct": 0.5,
             "stop_loss_type": "fixed",
             "stop_loss_value": 0.02,
         },
@@ -13,7 +13,7 @@ params = {
         "indicators": {"rsi": {"period": 14}, "sma": {"period": 50}},
         "risk": {
             "max_drawdown_limit_pct": 1.5,
-            "max_position_sizing_pct": 0.25,
+            "max_position_sizing_pct": 0.5,
             "stop_loss_type": "fixed",
             "stop_loss_value": 0.02,
         },
