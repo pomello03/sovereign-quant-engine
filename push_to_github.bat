@@ -5,6 +5,9 @@ echo   GitHub Upload Helper for Sovereign Quant Engine
 echo ===================================================
 echo.
 
+:: Ensure working directory is the script's directory
+cd /d "%~dp0"
+
 :: Detect if we have global git or local portable git
 set "GIT_CMD=git"
 where git >nul 2>nul

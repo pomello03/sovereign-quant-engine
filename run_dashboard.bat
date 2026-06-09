@@ -5,6 +5,9 @@ echo   Starting Sovereign Quant Engine Web Dashboard...
 echo ===================================================
 echo.
 
+:: Ensure working directory is the script's directory
+cd /d "%~dp0"
+
 :: Launch the FastAPI server in a separate background command window
 start "Sovereign Web Server" cmd /c "python web_dashboard/main.py"
 
