@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sovereign Quant Engine - Dashboard</title>
+    <!-- Google Fonts & Tailwind -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background: radial-gradient(circle at 50% 0%, #0f172a 0%, #020617 70%);
+            min-height: 100vh;
+        }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .text-glow-violet {
+            text-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
+        }
+        .text-glow-cyan {
+            text-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+        }
+    </style>
+</head>
+<body class="text-slate-100 font-sans p-6 md:p-12">
+    <div class="max-w-6xl mx-auto space-y-8">
+        
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row md:items-center md:justify-between border-b border-slate-800 pb-6 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight bg-gradient-to-r from-violet-400 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent">
+                    Sovereign Quant Engine
+                </h1>
+                <p class="text-sm text-slate-400 mt-1">Closed-Loop Validation & Performance Dashboard</p>
+            </div>
+            <div class="text-right text-xs text-slate-500">
+                <p>Validated At: <span class="text-slate-300">2026-06-09T10:40:20.766301Z</span></p>
+                <p>System State: <span class="text-emerald-400 font-mono">ONLINE</span></p>
+            </div>
+        </header>
+
+        <!-- Verdict Banner -->
+        <div class="glass-card rounded-2xl p-6 border bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 text-emerald-400 border-emerald-500/30">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <span class="text-xs uppercase font-semibold tracking-widest opacity-80">Supervisor Verdict</span>
+                    <h2 class="text-2xl font-bold tracking-tight mt-1">PASSED & APPROVED</h2>
+                </div>
+                <div class="text-right md:text-right">
+                    <p class="text-xs opacity-75">Max Drawdown Limit Allowed</p>
+                    <p class="text-2xl font-black font-mono">1.50%</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics Bento Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <!-- Sharpe Ratio -->
+            <div class="glass-card rounded-2xl p-6 flex flex-col justify-between hover:border-violet-500/30 transition-all duration-300 group">
+                <div class="flex justify-between items-center text-slate-400 text-xs font-semibold tracking-wider uppercase">
+                    <span>Sharpe Ratio</span>
+                    <svg class="h-4 w-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                </div>
+                <div class="mt-4">
+                    <h3 class="text-4xl font-extrabold text-glow-violet text-violet-300 font-mono tracking-tight">1.80</h3>
+                    <p class="text-[10px] text-slate-500 mt-1">Target: &ge; 1.33</p>
+                </div>
+            </div>
+
+            <!-- Max Drawdown -->
+            <div class="glass-card rounded-2xl p-6 flex flex-col justify-between hover:border-rose-500/30 transition-all duration-300 group">
+                <div class="flex justify-between items-center text-slate-400 text-xs font-semibold tracking-wider uppercase">
+                    <span>Max Drawdown</span>
+                    <svg class="h-4 w-4 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6"/></svg>
+                </div>
+                <div class="mt-4">
+                    <h3 class="text-4xl font-extrabold text-glow-cyan text-rose-400 font-mono tracking-tight">-1.50%</h3>
+                    <p class="text-[10px] text-slate-500 mt-1">Backtest peak drawdown</p>
+                </div>
+            </div>
+
+            <!-- Profit Factor -->
+            <div class="glass-card rounded-2xl p-6 flex flex-col justify-between hover:border-emerald-500/30 transition-all duration-300 group">
+                <div class="flex justify-between items-center text-slate-400 text-xs font-semibold tracking-wider uppercase">
+                    <span>Profit Factor</span>
+                    <svg class="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                </div>
+                <div class="mt-4">
+                    <h3 class="text-4xl font-extrabold text-emerald-400 font-mono tracking-tight">2.00</h3>
+                    <p class="text-[10px] text-slate-500 mt-1">Target: &ge; 1.0</p>
+                </div>
+            </div>
+
+            <!-- Risk of Ruin -->
+            <div class="glass-card rounded-2xl p-6 flex flex-col justify-between hover:border-cyan-500/30 transition-all duration-300 group">
+                <div class="flex justify-between items-center text-slate-400 text-xs font-semibold tracking-wider uppercase">
+                    <span>Risk of Ruin</span>
+                    <svg class="h-4 w-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                </div>
+                <div class="mt-4">
+                    <h3 class="text-4xl font-extrabold text-cyan-300 font-mono tracking-tight">0.70%</h3>
+                    <p class="text-[10px] text-slate-500 mt-1">Drawdown &gt; 1.50% in simulations</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Chart & Monte Carlo Summary -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Chart -->
+            <div class="glass-card rounded-2xl p-6 lg:col-span-2 space-y-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg font-bold">Monte Carlo Equity Projections</h3>
+                    <span class="text-xs text-slate-500">10 Random Sample Paths</span>
+                </div>
+                <div class="h-80 w-full">
+                    <canvas id="equityChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Stress Test Stats -->
+            <div class="glass-card rounded-2xl p-6 flex flex-col justify-between space-y-6">
+                <div>
+                    <h3 class="text-lg font-bold mb-4">Monte Carlo Metrics</h3>
+                    <div class="divide-y divide-slate-800 text-sm">
+                        <div class="flex justify-between py-3">
+                            <span class="text-slate-400">Total Simulations</span>
+                            <span class="font-mono font-medium text-slate-200">1000</span>
+                        </div>
+                        <div class="flex justify-between py-3">
+                            <span class="text-slate-400">Average Max Drawdown</span>
+                            <span class="font-mono font-medium text-rose-400">0.66%</span>
+                        </div>
+                        <div class="flex justify-between py-3">
+                            <span class="text-slate-400">Peak Simulated Drawdown</span>
+                            <span class="font-mono font-medium text-rose-500">2.08%</span>
+                        </div>
+                        <div class="flex justify-between py-3">
+                            <span class="text-slate-400">Total Strategy Trades</span>
+                            <span class="font-mono font-medium text-slate-200">42</span>
+                        </div>
+                        <div class="flex justify-between py-3">
+                            <span class="text-slate-400">Simulated Win Rate</span>
+                            <span class="font-mono font-medium text-emerald-400">55.0%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-xs text-slate-400 space-y-2">
+                    <p class="font-semibold text-slate-300">Methodology:</p>
+                    <p>Paths are generated using a Log-Normal Mixture Model under a 55.0% Win Rate and calibrated to a Profit Factor of 2.00. Winning trades follow LN(μ=0.0200, σ=0.005) and losing trades follow -LN(μ=0.01, σ=0.003).</p>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Script to Generate Chart Paths -->
+    <script>
+        const ctx = document.getElementById('equityChart').getContext('2d');
+        const numTrades = 42;
+        const profitFactor = parseFloat('2.00') || 1.5;
+        const winRate = parseFloat('0.55') || 0.50;
+        
+        // Log-Normal Mixture Model parameters
+        const meanWin = profitFactor * 0.01;
+        const sigmaWin = 0.005;
+        const muWin = Math.log(meanWin) - 0.5 * sigmaWin * sigmaWin;
+        const meanLoss = 0.01;
+        const sigmaLoss = 0.003;
+        const muLoss = Math.log(meanLoss) - 0.5 * sigmaLoss * sigmaLoss;
+        
+        // Box-Muller transform for normal random numbers
+        function randn() {
+            let u = 0, v = 0;
+            while (u === 0) u = Math.random();
+            while (v === 0) v = Math.random();
+            return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        }
+
+        // Generate 10 sample paths
+        const datasets = [];
+        const colors = [
+            'rgba(139, 92, 246, 0.45)', // Violet
+            'rgba(6, 182, 212, 0.45)',  // Cyan
+            'rgba(16, 185, 129, 0.45)',  // Emerald
+            'rgba(245, 158, 11, 0.45)',  // Amber
+            'rgba(239, 68, 68, 0.3)',    // Rose
+            'rgba(236, 72, 153, 0.3)',   // Pink
+            'rgba(59, 130, 246, 0.3)',   // Blue
+            'rgba(14, 165, 233, 0.3)',   // Sky
+            'rgba(168, 85, 247, 0.3)',   // Purple
+            'rgba(20, 184, 166, 0.3)',   // Teal
+        ];
+
+        const labels = Array.from({ length: numTrades + 1 }, (_, i) => i);
+
+        // Generate paths using Log-Normal Mixture
+        for (let p = 0; p < 10; p++) {
+            let equity = 100.0;
+            const data = [equity];
+            for (let t = 0; t < numTrades; t++) {
+                const isWin = Math.random() < winRate;
+                let tradeReturn;
+                if (isWin) {
+                    tradeReturn = Math.exp(muWin + sigmaWin * randn());
+                } else {
+                    tradeReturn = -Math.exp(muLoss + sigmaLoss * randn());
+                }
+                equity = equity * (1 + tradeReturn);
+                data.push(parseFloat(equity.toFixed(2)));
+            }
+            
+            datasets.push({
+                label: `Path ${p+1}`,
+                data: data,
+                borderColor: colors[p],
+                borderWidth: 2,
+                fill: false,
+                pointRadius: 0,
+                tension: 0.1
+            });
+        }
+
+        // Calculate average path
+        const averageData = [];
+        for (let t = 0; t <= numTrades; t++) {
+            let sum = 0;
+            for (let p = 0; p < 10; p++) {
+                sum += datasets[p].data[t];
+            }
+            averageData.push(parseFloat((sum / 10).toFixed(2)));
+        }
+
+        // Add Average Path highlighted
+        datasets.push({
+            label: 'Average Path',
+            data: averageData,
+            borderColor: 'rgba(255, 255, 255, 0.95)',
+            borderWidth: 4,
+            fill: false,
+            pointRadius: 0,
+            tension: 0.1
+        });
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.05)'
+                        },
+                        ticks: {
+                            color: '#64748b'
+                        }
+                    },
+                    y: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.05)'
+                        },
+                        ticks: {
+                            color: '#64748b'
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

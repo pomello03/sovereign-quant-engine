@@ -1,0 +1,46 @@
+# Sovereign Quant Engine - Workflow Rules
+
+This project enforces a strict, self-correcting Static Audit Pipeline to maintain optimal code quality, reduce API costs, and guarantee deployment stability.
+
+---
+
+## 🛡️ WORKFLOW DIRECTIVE (Closed-Loop)
+
+Every time you modify, optimize, or generate code in the `jesse_workspace/strategies/` directory, you **MUST** follow this sequence before completing your task or running a backtest:
+
+1. **Execute the local static audit**:
+   ```bash
+   ./bin/sqe-audit.sh
+   ```
+   *(On Windows, run via bash/sh, or let the orchestrator run it automatically).*
+
+2. **Handle failures (Exit Code != 0)**:
+   - Carefully review the console logs and errors output by **Ruff**, **Vulture**, or **Xenon**.
+   - **Do not ignore errors**. Immediately fix the issues (e.g., sort imports, remove dead variables, decrease cyclomatic complexity, split large blocks).
+   - Re-run `./bin/sqe-audit.sh` until the verification passes with a clean verdict (Exit Code 0).
+
+3. **Proceed to Backtest**:
+   - Only execute backtests or quantitative validations on Jesse *after* the static audit passes successfully.
+
+---
+
+## ⚙️ Static Check Arsenal (Python Equivalents)
+
+- **Ruff**: Syntax checking, unused import/export detection, and import formatting (`--select F,E,W,I,U`).
+- **Vulture**: Dead code detection with a confidence threshold (`--min-confidence 80`).
+- **Xenon**: Cyclomatic complexity enforcement (Max absolute: `A`, Max modules: `A`, Max block: `B`).
+
+---
+
+## 🏷️ Handling False Positives (# allow-ignore)
+
+To bypass analytical alerts for complex mathematical constructs or framework requirements, use these inline flags sparingly:
+
+- **Ruff (Unused Import/Style)**:
+  ```python
+  import custom_indicator  # noqa: F401
+  ```
+- **Vulture (False Dead Code)**:
+  ```python
+  self.unused_momentum_buffer = 0  # dead: disable
+  ```

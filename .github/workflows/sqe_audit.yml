@@ -1,0 +1,33 @@
+name: SQE Static Audit CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  audit:
+    name: Run Static Audit
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install ruff radon xenon vulture
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Make Audit Script Executable
+      run: chmod +x bin/sqe-audit.sh
+
+    - name: Run Static Audit Pipeline
+      run: ./bin/sqe-audit.sh

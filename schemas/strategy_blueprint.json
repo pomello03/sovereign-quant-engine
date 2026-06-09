@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StrategyBlueprint",
+  "type": "object",
+  "properties": {
+    "alpha": {
+      "type": "object",
+      "properties": {
+        "strategy_name": {"type": "string"},
+        "indicators": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string"},
+              "params": {"type": "object"}
+            },
+            "required": ["name", "params"]
+          }
+        },
+        "entry_long_conditions": {"type": "array", "items": {"type": "string"}},
+        "entry_short_conditions": {"type": "array", "items": {"type": "string"}}
+      },
+      "required": ["strategy_name", "indicators", "entry_long_conditions", "entry_short_conditions"]
+    },
+    "risk": {
+      "type": "object",
+      "properties": {
+        "max_drawdown_limit_pct": {"type": "number", "maximum": 2.0},
+        "stop_loss_type": {"type": "string", "enum": ["fixed", "trailing", "atr"]},
+        "stop_loss_value": {"type": "number"},
+        "take_profit_value": {"type": "number"},
+        "risk_to_reward_minimum": {"type": "number", "minimum": 1.5},
+        "max_position_sizing_pct": {"type": "number", "maximum": 5.0}
+      },
+      "required": ["max_drawdown_limit_pct", "stop_loss_type", "stop_loss_value", "max_position_sizing_pct"]
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "market_regime": {"type": "string", "enum": ["trending_bullish", "trending_bearish", "ranging", "volatile_choppy"]},
+        "timeframe": {"type": "string"},
+        "trend_strength": {"type": "string", "enum": ["strong", "weak", "neutral"]},
+        "volatility_state": {"type": "string", "enum": ["high", "low", "normal"]}
+      },
+      "required": ["market_regime", "timeframe", "volatility_state"]
+    },
+    "generated_at": {"type": "string"},
+    "supervisor_verdict": {"type": "string", "enum": ["APPROVED", "REJECTED"]}
+  },
+  "required": ["alpha", "risk", "context", "generated_at", "supervisor_verdict"]
+}

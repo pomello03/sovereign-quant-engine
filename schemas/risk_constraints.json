@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RiskConstraints",
+  "type": "object",
+  "properties": {
+    "max_drawdown_limit_pct": {"type": "number", "maximum": 2.0}, 
+    "stop_loss_type": {"type": "string", "enum": ["fixed", "trailing", "atr"]},
+    "stop_loss_value": {"type": "number"},
+    "take_profit_value": {"type": "number"},
+    "risk_to_reward_minimum": {"type": "number", "minimum": 1.5},
+    "max_position_sizing_pct": {"type": "number", "maximum": 5.0}
+  },
+  "required": ["max_drawdown_limit_pct", "stop_loss_type", "stop_loss_value", "max_position_sizing_pct"]
+}

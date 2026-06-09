@@ -1,0 +1,17 @@
+# Exclude Jesse storage containing heavy historical data and databases
+jesse_workspace/storage/
+jesse_workspace/storage_jesse/
+*.db
+*.sqlite
+*.sqlite3
+
+# Exclude python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Exclude logs
+*.log

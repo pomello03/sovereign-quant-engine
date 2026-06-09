@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Pytest / testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jesse Framework specific exclusions
+jesse_workspace/storage/
+jesse_workspace/storage_jesse/
+
+# Environment variables & secrets (CRITICAL: Do not upload API keys!)
+jesse_workspace/.env
+.env
+
+# SQLite databases if generated locally
+*.db
+*.sqlite
+*.sqlite3
+
+# Windows OS files
+Thumbs.db
+Desktop.ini
+
+# Portable Git utility
+bin/MinGit/
