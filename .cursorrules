@@ -51,17 +51,17 @@ To bypass analytical alerts for complex mathematical constructs or framework req
 
 The workspace is configured with a portable Git environment and pre-authenticated remote access.
 
-- **Git Executable location**: `bin/MinGit/cmd/git.exe`
+- **Git Executable location**: `C:/Users/francesco.bonino/Documents/bin/MinGit/cmd/git.exe`
 - **Authentication**: Pre-configured using your PAT token in the git remote URL (stored securely in `.git/config` and ignored by commits).
 - **Staging and Pushing Changes**: Every time the user asks you to push modifications, run these commands:
   ```powershell
   # 1. Stage changes (excluding ignored files)
-  & "bin\MinGit\cmd\git.exe" add .
+  & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" add .
   
   # 2. Commit changes
-  & "bin\MinGit\cmd\git.exe" commit -m "Your descriptive commit message"
+  & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" commit -m "Your descriptive commit message"
   
   # 3. Push to GitHub
-  & "bin\MinGit\cmd\git.exe" push origin main
+  & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" push origin main
   ```
 - **Security Invariant**: Never add the PAT token raw inside any tracked source file or readme, as GitHub secret scanning will automatically revoke it. Keep all config details inside `.git/config`.

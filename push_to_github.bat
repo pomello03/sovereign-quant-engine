@@ -12,9 +12,9 @@ cd /d "%~dp0"
 set "GIT_CMD=git"
 where git >nul 2>nul
 if %errorlevel% neq 0 (
-    if exist "bin\MinGit\cmd\git.exe" (
-        set "GIT_CMD=bin\MinGit\cmd\git.exe"
-        echo [INFO] Local portable Git detected at bin\MinGit\cmd\git.exe
+    if exist "..\bin\MinGit\cmd\git.exe" (
+        set "GIT_CMD=..\bin\MinGit\cmd\git.exe"
+        echo [INFO] Shared portable Git detected at ..\bin\MinGit\cmd\git.exe
     ) else (
         echo [ERROR] Git is not installed or not in your PATH.
         echo Please install Git for Windows from: https://git-scm.com/download/win
