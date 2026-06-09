@@ -1,6 +1,6 @@
 # Guida Semplicissima al Sovereign Quant Engine
 
-Questa guida spiega il funzionamento dell'infrastruttura utilizzando la metafora di un ristorante di lusso. Questo ti aiuterà a capire come le varie parti del computer cooperano per proteggere il tuo denaro, senza bisogno di conoscere la programmazione o la finanza avanzata.
+Questa guida spiega il funzionamento dell'infrastruttura utilizzando la metafora di un ristorante di lusso. Questo ti aiuterà a capire come le varie parti cooperano per proteggere il tuo denaro, senza bisogno di conoscere la programmazione o la finanza avanzata.
 
 ## 1. La Metafora del Ristorante
 Per evitare errori, la gestione del sistema di trading è divisa in ruoli separati, proprio come in un ristorante:
@@ -19,6 +19,6 @@ Per verificare se la strategia è robusta, eseguiamo una simulazione statistica 
 
 ---
 ### Note Correlate:
-- [[Sovereign Quant Engine]] (Indice)
-- [[Architecture Bible]]
-- [[Guida al Deploy IRL Sicuro]]
+- [Indice della Documentazione](file:///C:/Users/francesco.bonino/Documents/SQE%20branch/docs/Sovereign_Quant_Engine.md)
+- [Guida Master Completa](file:///C:/Users/francesco.bonino/Documents/SQE%20branch/docs/Guida%20Master%20Completa.md)
+- [Pipeline Deploy IRL](file:///C:/Users/francesco.bonino/Documents/SQE%20branch/docs/Pipeline%20Deploy%20IRL%20Bybit%20Hetzner.md)
