@@ -28,3 +28,7 @@ Desktop.ini
 
 # Portable Git utility
 bin/MinGit/
+
+# Personal Access Tokens / keys
+*PAT*
+Personal
