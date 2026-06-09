@@ -31,6 +31,15 @@ graph TD
   - **Parametric Log-normal Mixture**: Fallback simulation that models fat-tailed behavior and asymmetrical return profiles (based on Sharpe ratio, win rate, and total trades) when raw logs are missing.
 - Generates `validation_report.json` and stages a beautiful `validation_dashboard.html` for local visual analysis.
 
+### 4. Risk Parameter Optimizer (`core_engine/optimizer.py`)
+- Automatically triggers if initial backtest metrics violate risk constraints.
+- Recursively tunes strategy hyperparameters (such as scaling down `max_position_sizing_pct` and adjusting `stop_loss_value`) and executes new backtests and Monte Carlo stress tests until a safe configuration is found.
+
+### 5. Web Dashboard & Real-Time Monitor (`web_dashboard/`)
+- A premium, responsive single-page web application served via FastAPI.
+- Integrates a live stepper illustrating pipeline progress, metrics widgets, a monospaced terminal logs viewer, and a real-time dual-axes Chart.js chart plotting the optimizer's tuning trajectory.
+- Features interactive click-to-explain info tooltips (in Italian) for all metrics and stages.
+
 ---
 
 ## Directory Structure
@@ -79,6 +88,20 @@ graph TD
    ```bash
    python run_simulation.py
    ```
+
+5. **Start the Web Dashboard**:
+   To run the interactive web interface, double-click the Windows batch launcher:
+   ```bash
+   run_dashboard.bat
+   ```
+   This spins up the FastAPI server in the background and opens the dashboard in your default browser at `http://127.0.0.1:8000`.
+
+6. **Push Changes to GitHub**:
+   To upload your code and simulation results to your repository, double-click the helper script:
+   ```bash
+   push_to_github.bat
+   ```
+   This automatically detects the local portable Git client and prompts you for authentication to sync changes.
 
 ---
 
