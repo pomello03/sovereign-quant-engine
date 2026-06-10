@@ -19,12 +19,12 @@ class SovereignStrategy(Strategy):
 
     @property
     def current_regime(self) -> str:
-        return 'trending_bullish'
+        return "trending_bullish"
 
     @property
     def hyperparameters(self):
-        if isinstance(params, dict) and 'default' in params:
-            return params.get(self.current_regime, params.get('default', params))
+        if isinstance(params, dict) and "default" in params:
+            return params.get(self.current_regime, params.get("default", params))
         return params
 
     @staticmethod
@@ -33,7 +33,7 @@ class SovereignStrategy(Strategy):
         return (
             isinstance(value, (int, float))
             and value == value
-            and value not in (float('inf'), float('-inf'))
+            and value not in (float("inf"), float("-inf"))
         )
 
     def _safe_indicator(self, calc, min_candles: int, fallback: float) -> float:
@@ -48,21 +48,24 @@ class SovereignStrategy(Strategy):
 
     def _coerce_number(self, value, fallback: float) -> float:
         # Reduces a possible series to its last element, then validates it.
-        if hasattr(value, '__len__'):
+        if hasattr(value, "__len__"):
             value = value[-1] if len(value) else fallback
         return value if self._is_valid_number(value) else fallback
+
     @property
     def rsi(self) -> float:
         return self._safe_indicator(
             lambda: ta.rsi(self.candles, period=14),
-            min_candles=15, fallback=50.0,
+            min_candles=15,
+            fallback=50.0,
         )
 
     @property
     def sma(self) -> float:
         return self._safe_indicator(
             lambda: ta.sma(self.candles, period=50),
-            min_candles=51, fallback=self.price,
+            min_candles=51,
+            fallback=self.price,
         )
 
     def should_long(self) -> bool:
@@ -85,7 +88,8 @@ class SovereignStrategy(Strategy):
         # Robust ATR getter: positive fallback avoids div-by-zero in sizing.
         return self._safe_indicator(
             lambda: ta.atr(self.candles),
-            min_candles=20, fallback=(self.price * 0.01),
+            min_candles=20,
+            fallback=(self.price * 0.01),
         )
 
     def _position_qty(self) -> float:
@@ -93,7 +97,7 @@ class SovereignStrategy(Strategy):
         # Risk amount = Capital * max_position_sizing_pct / 100; Qty = risk / (ATR * 2)
         try:
             stop_distance = self.atr * 2
-            risk_pct = self.hyperparameters['risk']['max_position_sizing_pct'] / 100.0
+            risk_pct = self.hyperparameters["risk"]["max_position_sizing_pct"] / 100.0
             qty = (self.capital * risk_pct) / stop_distance
         except Exception:
             qty = None
@@ -105,16 +109,16 @@ class SovereignStrategy(Strategy):
     def go_long(self):
         qty = self._position_qty()
         self.buy = qty, self.price
-        sl_value = self.hyperparameters['risk']['stop_loss_value']
-        tp_value = self.hyperparameters['risk'].get('take_profit_value', sl_value * 2)
+        sl_value = self.hyperparameters["risk"]["stop_loss_value"]
+        tp_value = self.hyperparameters["risk"].get("take_profit_value", sl_value * 2)
         self.stop_loss = qty, self.price * (1 - sl_value)
         self.take_profit = qty, self.price * (1 + tp_value)
 
     def go_short(self):
         qty = self._position_qty()
         self.sell = qty, self.price
-        sl_value = self.hyperparameters['risk']['stop_loss_value']
-        tp_value = self.hyperparameters['risk'].get('take_profit_value', sl_value * 2)
+        sl_value = self.hyperparameters["risk"]["stop_loss_value"]
+        tp_value = self.hyperparameters["risk"].get("take_profit_value", sl_value * 2)
         self.stop_loss = qty, self.price * (1 + sl_value)
         self.take_profit = qty, self.price * (1 - tp_value)
 
@@ -128,7 +132,7 @@ class SovereignStrategy(Strategy):
         elif self.is_short:
             self._trail_side(is_long=False)
         else:
-            self._trail_peak = None      # flat: reset state for the next position
+            self._trail_peak = None  # flat: reset state for the next position
             self._last_sent_sl = None
 
     def _trail_side(self, is_long: bool):
@@ -146,7 +150,7 @@ class SovereignStrategy(Strategy):
             self._trail_peak = self.price
 
     def _trailing_sl(self, is_long: bool) -> float:
-        sl_value = self.hyperparameters['risk']['stop_loss_value']
+        sl_value = self.hyperparameters["risk"]["stop_loss_value"]
         factor = (1 - sl_value) if is_long else (1 + sl_value)
         return self._trail_peak * factor
 
@@ -174,8 +178,8 @@ class SovereignStrategy(Strategy):
 
     def update_position(self):
         # Dynamic stop-loss management based on stop_loss_type
-        sl_type = self.hyperparameters['risk'].get('stop_loss_type', 'fixed')
-        if sl_type == 'trailing':
+        sl_type = self.hyperparameters["risk"].get("stop_loss_type", "fixed")
+        if sl_type == "trailing":
             self._update_trailing_stop()
-        elif sl_type == 'atr':
+        elif sl_type == "atr":
             self._update_atr_stop()
