@@ -21,27 +21,27 @@ graph TD
     F -->|Parametri Corretti| B
 ```
 
-### 1. Nodo di Supervisione ([supervisor.py](file:///C:/Users/francesco.bonino/Documents/SQE%20branch/core_engine/supervisor.py))
+### 1. Nodo di Supervisione ([supervisor.py](file:///C:/Users/franc/Documents/sovereign-quant-engine/core_engine/supervisor.py))
 * **Scopo:** Agisce come gatekeeper all'inizio della pipeline. Si assicura che qualsiasi richiesta (payload) o configurazione in ingresso sia strutturalmente valida e non violi i limiti fondamentali di rischio.
 * **Dettagli:** Valida i file di configurazione (`strategy_blueprint.json` e `risk_constraints.json`) rispetto a schemi JSON formali rigorosi. Blocca immediatamente l'esecuzione se rileva parametri di rischio assurdi o formati errati.
 
-### 2. Ponte di Sviluppo ([developer_bridge.py](file:///C:/Users/francesco.bonino/Documents/SQE%20branch/core_engine/developer_bridge.py))
+### 2. Ponte di Sviluppo ([developer_bridge.py](file:///C:/Users/franc/Documents/sovereign-quant-engine/core_engine/developer_bridge.py))
 * **Scopo:** Genera il codice Python conforme a Jesse a partire dalle specifiche del blueprint.
 * **AST Security Parser:** Per escludere attacchi di *code injection*, implementa un parser AST (Abstract Syntax Tree) che analizza formalmente le formule matematiche e le condizioni tecniche di ingresso/uscita (es. `close > EMA(50)`). Rifiuta qualsiasi istruzione non inclusa in una whitelist ristretta (esclude chiamate a funzioni esterne, importazioni di librerie arbitrarie o accessi a proprietà di sistema).
 * **Regime Switching:** Mappa automaticamente parametri diversi a seconda del regime di mercato attivo (es. *trending_bullish*, *ranging_bearish*) e inietta il codice a runtime per commutare dinamicamente i parametri di risk management durante il backtest.
 
-### 3. Validatore Quantitativo ([quant_validator.py](file:///C:/Users/francesco.bonino/Documents/SQE%20branch/core_engine/quant_validator.py))
+### 3. Validatore Quantitativo ([quant_validator.py](file:///C:/Users/franc/Documents/sovereign-quant-engine/core_engine/quant_validator.py))
 * **Scopo:** Valuta l'affidabilità statistica della strategia superando i limiti del backtest classico.
 * **Simulatore Monte Carlo Avanzato:** Esegue stress test per calcolare la probabilità di rovina (*Risk of Ruin*) e il Drawdown Massimo atteso tramite:
   - **Bootstrap Non-Parametrico (Empirico):** Se sono presenti i dati reali dei singoli trade eseguiti dal backtest, esegue un campionamento casuale con reinserimento per ricostruire migliaia di curve di equity, preservando la reale distribuzione di probabilità originaria (inclusi eventi fat-tail e asimmetrie).
   - **Mixture Log-Normale Parametrica:** Se mancano i log di trade storici dettagliati, genera campioni casuali sintetici basandosi sui macro-indicatori (Sharpe Ratio, Win Rate, Profit Factor, numero totale di operazioni) modellando distribuzioni asimmetriche realistiche.
 * **Output:** Genera `validation_report.json` e aggiorna la dashboard visuale.
 
-### 4. Ottimizzatore Parametri di Rischio ([optimizer.py](file:///C:/Users/francesco.bonino/Documents/SQE%20branch/core_engine/optimizer.py))
+### 4. Ottimizzatore Parametri di Rischio ([optimizer.py](file:///C:/Users/franc/Documents/sovereign-quant-engine/core_engine/optimizer.py))
 * **Scopo:** Se le metriche finali o la simulazione Monte Carlo indicano che la strategia supera le soglie di rischio (es. probabilità di rovina > 5% o drawdown > 15%), questo modulo interviene in modo iterativo.
 * **Dettagli:** Scala dinamicamente la dimensione delle posizioni (`max_position_sizing_pct`), incrementa la severità dello stop loss (`stop_loss_value`) ed esegue nuovamente i cicli di backtest e validazione fino a trovare una configurazione compliant e sicura per il trading.
 
-### 5. Monitor & Dashboard Web ([web_dashboard/](file:///C:/Users/francesco.bonino/Documents/SQE%20branch/web_dashboard/))
+### 5. Monitor & Dashboard Web ([web_dashboard/](file:///C:/Users/franc/Documents/sovereign-quant-engine/web_dashboard/))
 * **Scopo:** Un'applicazione web responsive basata su FastAPI e HTML5/Vanilla CSS che fornisce una visualizzazione in tempo reale di tutto il processo.
 * **Dettagli:** Mostra un indicatore di progresso (stepper) del processo, metriche chiave di performance, un visualizzatore di log in tempo reale e un grafico interattivo (Chart.js) che illustra la traiettoria di calibrazione dell'ottimizzatore. Include tooltip informativi completi in lingua italiana.
 
@@ -120,7 +120,7 @@ Il progetto adotta rigorosamente il modello **GitFlow** per garantire la stabili
 * **`develop`:** È il ramo di integrazione principale per il lavoro corrente.
 * **`feature/*`:** Branch temporanei creati a partire da `develop` per l'aggiunta di indicatori o nuove logiche.
 
-Per maggiori dettagli su come collaborare con l'agente o gestire le release, consulta la [Guida al Git Workflow](file:///C:/Users/francesco.bonino/Documents/SQE%20branch/docs/git_workflow.md).
+Per maggiori dettagli su come collaborare con l'agente o gestire le release, consulta la [Guida al Git Workflow](file:///C:/Users/franc/Documents/sovereign-quant-engine/docs/git_workflow.md).
 
 ---
 

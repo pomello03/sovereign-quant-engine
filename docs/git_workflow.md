@@ -84,22 +84,22 @@ Quando l'utente richiede una nuova funzionalità o una modifica:
 1. **Creazione del Branch di Lavoro:**
    L'agente crea un branch `feature/*` da `develop` (o direttamente da `main` se `develop` non esiste ancora):
    ```powershell
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" checkout -b feature/nome-funzionalita develop
+   & "C:\Program Files\Git\cmd\git.exe" checkout -b feature/nome-funzionalita develop
    ```
 2. **Sviluppo e Validazione Locale:**
    L'agente implementa le modifiche e lancia l'audit e i test unitari. Se si verificano errori, li corregge nello stesso branch.
 3. **Commit delle Modifiche:**
    I messaggi di commit devono descrivere in modo chiaro l'impatto delle modifiche:
    ```powershell
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" add .
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" commit -m "feat: aggiunto supporto per indicatori volumetrici"
+   & "C:\Program Files\Git\cmd\git.exe" add .
+   & "C:\Program Files\Git\cmd\git.exe" commit -m "feat: aggiunto supporto per indicatori volumetrici"
    ```
 4. **Merge su `develop`:**
    L'agente si sposta su `develop` e fonde il feature branch:
    ```powershell
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" checkout develop
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" merge --no-ff feature/nome-funzionalita
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" push origin develop
+   & "C:\Program Files\Git\cmd\git.exe" checkout develop
+   & "C:\Program Files\Git\cmd\git.exe" merge --no-ff feature/nome-funzionalita
+   & "C:\Program Files\Git\cmd\git.exe" push origin develop
    ```
 
 ### Flusso di Rilascio (Release) dell'Agente
@@ -108,22 +108,22 @@ Quando le modifiche accumulate su `develop` sono pronte per formare una nuova ve
 
 1. **Creazione del Branch di Release:**
    ```powershell
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" checkout -b release/vX.Y.Z develop
+   & "C:\Program Files\Git\cmd\git.exe" checkout -b release/vX.Y.Z develop
    ```
 2. **Esecuzione Simulazione di Validazione:**
    L'agente esegue `python run_simulation.py` per accertarsi che il validatore quantitativo approvi la stabilità della strategia a livello Monte Carlo.
 3. **Merge su `main` e Creazione del Tag:**
    ```powershell
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" checkout main
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" merge --no-ff release/vX.Y.Z
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" tag -a vX.Y.Z -m "Release vX.Y.Z - [Dettagli delle modifiche principali]"
+   & "C:\Program Files\Git\cmd\git.exe" checkout main
+   & "C:\Program Files\Git\cmd\git.exe" merge --no-ff release/vX.Y.Z
+   & "C:\Program Files\Git\cmd\git.exe" tag -a vX.Y.Z -m "Release vX.Y.Z - [Dettagli delle modifiche principali]"
    ```
 4. **Allineamento di `develop` e Pulizia:**
    ```powershell
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" checkout develop
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" merge main
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" push origin main develop --tags
-   & "C:\Users\francesco.bonino\Documents\bin\MinGit\cmd\git.exe" branch -d release/vX.Y.Z
+   & "C:\Program Files\Git\cmd\git.exe" checkout develop
+   & "C:\Program Files\Git\cmd\git.exe" merge main
+   & "C:\Program Files\Git\cmd\git.exe" push origin main develop --tags
+   & "C:\Program Files\Git\cmd\git.exe" branch -d release/vX.Y.Z
    ```
 
 ---

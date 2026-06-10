@@ -26,6 +26,10 @@ jesse_workspace/.env
 Thumbs.db
 Desktop.ini
 
+# Virtual Environment
+venv/
+.venv/
+
 # Portable Git utility
 bin/MinGit/
 

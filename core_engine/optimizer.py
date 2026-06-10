@@ -16,6 +16,18 @@ class RiskOptimizer:
             workspace_path=self.workspace_path
         )
         self.validator = QuantValidator(payload_drop_dir=self.payload_drop_dir)
+        # Chronological record of every optimization attempt (fed to the dashboard stepper)
+        self.optimization_history = []
+
+    def _read_strategy_code(self) -> str:
+        """Returns the generated SovereignStrategy source, or None if not present."""
+        code_path = os.path.join(
+            self.workspace_path, "strategies", "SovereignStrategy", "__init__.py"
+        )
+        if os.path.exists(code_path):
+            with open(code_path, "r", encoding="utf-8") as f:
+                return f.read()
+        return None
 
     def optimize_risk_parameters(self, max_iterations: int = 10) -> dict:
         """
@@ -43,6 +55,8 @@ class RiskOptimizer:
         sl = blueprint.get("risk", {}).get("stop_loss_value", 0.02)
 
         best_report = None
+        self.optimization_history = []
+        drawdown_limit = constraints.get("max_drawdown_limit_pct", 2.0)
 
         for iteration in range(1, max_iterations + 1):
             print(f"\n[Iteration {iteration}] Testing params: Position Size = {pos_size:.3f}%, Stop Loss = {sl*100:.2f}%")
@@ -67,8 +81,38 @@ class RiskOptimizer:
 
             metrics = result["metrics"]
 
-            # 5. Validate metrics and run Monte Carlo Stress Test
-            report = self.validator.generate_report(metrics, constraints, num_simulations=1000)
+            # 5. Run Monte Carlo once (with trajectories) and record the attempt
+            mc_results = self.validator.run_monte_carlo(
+                metrics, num_simulations=1000, drawdown_limit=drawdown_limit,
+                collect_trajectories=50
+            )
+            iteration_passed = self.validator.validate_with_monte_carlo(
+                metrics, constraints, mc_results
+            )
+            self.optimization_history.append({
+                "iteration": iteration,
+                "params": {
+                    "max_position_sizing_pct": round(pos_size, 4),
+                    "stop_loss_value": round(sl, 4)
+                },
+                "metrics": {
+                    key: metrics.get(key)
+                    for key in ("sharpe_ratio", "max_drawdown", "profit_factor",
+                                "total_trades", "win_rate")
+                },
+                "risk_of_ruin": mc_results["risk_of_ruin"],
+                "average_max_drawdown": mc_results["average_max_drawdown"],
+                "validation_passed": iteration_passed
+            })
+
+            # 6. Validate metrics and write report/dashboard (reusing the MC run)
+            report = self.validator.generate_report(
+                metrics, constraints, num_simulations=1000,
+                optimization_history=self.optimization_history,
+                strategy_code=self._read_strategy_code(),
+                blueprint=blueprint,
+                mc_results=mc_results
+            )
             best_report = report
 
             print(f">> Simulated Max Drawdown: {metrics['max_drawdown']:.2f}%")
@@ -81,7 +125,7 @@ class RiskOptimizer:
                 print(f">> Final Stop Loss: {sl*100:.2f}%")
                 return report
 
-            # 6. Adjust parameters heuristically
+            # 7. Adjust parameters heuristically
             # Scale down position sizing first to reduce overall drawdown impact
             if pos_size > 0.1:
                 pos_size = max(0.1, pos_size * 0.5)

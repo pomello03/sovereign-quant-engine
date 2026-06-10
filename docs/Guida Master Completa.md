@@ -35,7 +35,7 @@ Il modulo di validazione quantitativa implementa un doppio motore Monte Carlo pe
 Per raccogliere lo storico delle candele ed eseguire i backtest di Jesse, PostgreSQL deve essere online.
 1. Apri il terminale nella cartella principale del progetto:
    ```powershell
-   cd "C:\Users\francesco.bonino\Documents\SQE branch"
+   cd "C:\Users\franc\Documents\sovereign-quant-engine"
    ```
 2. Avvia i container definiti in `docker-compose.yml`:
    ```powershell
@@ -69,7 +69,7 @@ Per visualizzare l'interfaccia interattiva del stepper del processo, log del ter
 
 ### Opzione B: File Dashboard di Validazione Locale
 Puoi anche aprire direttamente il file HTML statico generato sul tuo browser:
-[validation_dashboard.html](file:///C:/Users/francesco.bonino/Documents/SQE%20branch/payload_drop/validation_dashboard.html)
+[validation_dashboard.html](file:///C:/Users/franc/Documents/sovereign-quant-engine/payload_drop/validation_dashboard.html)
 
 ---
 

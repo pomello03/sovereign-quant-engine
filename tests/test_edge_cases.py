@@ -1,10 +1,12 @@
 import os
+import time
 import json
 import pytest
 from jsonschema import ValidationError
 from core_engine.supervisor import Supervisor, RuinBiasViolationError
 from core_engine.developer_bridge import DeveloperBridge
 from core_engine.quant_validator import QuantValidator
+from core_engine.state_io import StaleStateError
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +99,31 @@ class TestSupervisorEdgeCases:
         supervisor = Supervisor(schemas_dir=REAL_SCHEMAS_DIR, payload_drop_dir=str(temp_payload_dir))
         with pytest.raises(ValidationError, match="stop_loss_value cannot be zero"):
             supervisor.validate_and_generate()
+
+    def test_supervisor_rejects_stale_alpha_spec(self, temp_payload_dir, valid_payloads):
+        """Vuln 1: a stale alpha_spec.json (silent upstream failure) is rejected
+        when freshness enforcement is enabled."""
+        alpha, risk, context = valid_payloads
+        write_payload_files(temp_payload_dir, alpha, risk, context)
+        # Backdate alpha_spec.json past the freshness window.
+        alpha_path = temp_payload_dir / "alpha_spec.json"
+        old = time.time() - 120
+        os.utime(alpha_path, (old, old))
+
+        supervisor = Supervisor(schemas_dir=REAL_SCHEMAS_DIR,
+                                payload_drop_dir=str(temp_payload_dir),
+                                max_spec_age_seconds=60)
+        with pytest.raises(StaleStateError):
+            supervisor.validate_and_generate()
+
+    def test_supervisor_fresh_alpha_spec_passes(self, temp_payload_dir, valid_payloads):
+        """Freshness enabled + freshly written spec -> approved."""
+        alpha, risk, context = valid_payloads
+        write_payload_files(temp_payload_dir, alpha, risk, context)
+        supervisor = Supervisor(schemas_dir=REAL_SCHEMAS_DIR,
+                                payload_drop_dir=str(temp_payload_dir),
+                                max_spec_age_seconds=60)
+        assert supervisor.validate_and_generate()["supervisor_verdict"] == "APPROVED"
 
     def test_supervisor_boundary_drawdown_exactly_2(self, temp_payload_dir, valid_payloads):
         """max_drawdown_limit_pct=2.0 is exactly on the boundary and should pass."""
@@ -212,17 +239,37 @@ class TestValidatorEdgeCases:
     def test_validate_with_monte_carlo_passes_good_mc(self):
         """When both base metrics and MC results are good, should pass."""
         validator = QuantValidator()
-        metrics = {"sharpe_ratio": 2.0, "max_drawdown": -1.0, "profit_factor": 2.0}
+        metrics = {"sharpe_ratio": 2.0, "max_drawdown": -1.0, "profit_factor": 2.0,
+                   "total_trades": 40}
         constraints = {
             "max_drawdown_limit_pct": 2.0,
             "sharpe_ratio_minimum": 1.5,
             "profit_factor_minimum": 1.5
         }
+        # Unbiased stress test: bootstrap mode with a sufficient real-trade sample (Vuln 5).
         mc_results = {
             "risk_of_ruin": 0.02,
             "average_max_drawdown": 1.0,
+            "simulation_mode": "bootstrap",
+            "real_trades_used": 40,
         }
         assert validator.validate_with_monte_carlo(metrics, constraints, mc_results) is True
+
+    def test_validate_with_monte_carlo_rejects_inactive_strategy(self):
+        """Empty-trades bypass guard (Vuln 5): no real trades -> reject even with 0% ruin."""
+        validator = QuantValidator()
+        metrics = {"sharpe_ratio": 2.0, "max_drawdown": 0.0, "profit_factor": 2.0,
+                   "total_trades": 0}
+        constraints = {"max_drawdown_limit_pct": 2.0, "sharpe_ratio_minimum": 1.5,
+                       "profit_factor_minimum": 1.5}
+        # Inactive strategy: parametric fallback, zero real trades -> false positive otherwise.
+        mc_results = {
+            "risk_of_ruin": 0.0,
+            "average_max_drawdown": 0.0,
+            "simulation_mode": "parametric_lognormal",
+            "real_trades_used": 0,
+        }
+        assert validator.validate_with_monte_carlo(metrics, constraints, mc_results) is False
 
     def test_validate_with_monte_carlo_fails_if_base_fails(self):
         """Even if MC results are stellar, bad base metrics should fail."""

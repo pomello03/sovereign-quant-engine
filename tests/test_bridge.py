@@ -48,6 +48,49 @@ def write_blueprint_file(payload_dir, blueprint):
     with open(payload_dir / "strategy_blueprint.json", "w", encoding="utf-8") as f:
         json.dump(blueprint, f)
 
+def test_generated_code_is_syntactically_valid(temp_dirs, dummy_blueprint):
+    """The generated strategy module must always parse (no template breakage)."""
+    import ast
+    payload_dir, workspace_dir = temp_dirs
+    bridge = DeveloperBridge(payload_drop_dir=str(payload_dir), workspace_path=str(workspace_dir))
+    bridge.generate_strategy_code(dummy_blueprint)
+    strategy_dir = workspace_dir / "strategies" / "SovereignStrategy"
+    ast.parse((strategy_dir / "__init__.py").read_text(encoding="utf-8"))
+    ast.parse((strategy_dir / "params.py").read_text(encoding="utf-8"))
+
+
+def test_generated_getters_are_nan_safe(temp_dirs, dummy_blueprint):
+    """Vuln 2: indicator getters route through _safe_indicator with cold-start guards."""
+    payload_dir, workspace_dir = temp_dirs
+    bridge = DeveloperBridge(payload_drop_dir=str(payload_dir), workspace_path=str(workspace_dir))
+    bridge.generate_strategy_code(dummy_blueprint)
+    code = (workspace_dir / "strategies" / "SovereignStrategy" / "__init__.py").read_text(encoding="utf-8")
+    # Helper present, getters use it, and the qty path is guarded.
+    assert "_safe_indicator" in code
+    assert "min_candles=" in code
+    assert "_is_valid_number" in code
+    assert "fallback=50.0" in code            # RSI neutral fallback
+    assert "def rsi(self)" in code
+    # ATR getter has a positive fallback (no div-by-zero in sizing)
+    assert "fallback=(self.price * 0.01)" in code
+
+
+def test_generated_trailing_stop_is_hardened(temp_dirs, dummy_blueprint):
+    """Vuln 4: trailing stop tracks a peak, is unidirectional and API-throttled."""
+    payload_dir, workspace_dir = temp_dirs
+    bp = json.loads(json.dumps(dummy_blueprint))
+    bp["risk"]["stop_loss_type"] = "trailing"
+    bridge = DeveloperBridge(payload_drop_dir=str(payload_dir), workspace_path=str(workspace_dir))
+    bridge.generate_strategy_code(bp)
+    code = (workspace_dir / "strategies" / "SovereignStrategy" / "__init__.py").read_text(encoding="utf-8")
+    assert "_trail_peak" in code
+    assert "TRAIL_MIN_MOVE_PCT" in code
+    assert "_should_resend_stop" in code
+    # Unidirectional movement enforced via the favourable-move helper
+    assert "_is_favorable_move" in code
+    assert "_is_new_extreme" in code
+
+
 def test_generate_strategy_code(temp_dirs, dummy_blueprint):
     payload_dir, workspace_dir = temp_dirs
     bridge = DeveloperBridge(

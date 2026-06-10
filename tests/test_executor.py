@@ -69,7 +69,9 @@ def test_run_backtest_jesse_not_installed(mock_which):
     result = runner.run_backtest("2021-01-01", "2021-02-01")
     assert result["status"] == "SUCCESS"
     assert result["metrics"]["sharpe_ratio"] == 1.85
-    assert result["metrics"]["total_trades"] == 42
+    assert result["metrics"]["total_trades"] == 40
+    # Mock now ships a real per-trade returns sample for unbiased bootstrap MC (Vuln 5)
+    assert len(result["metrics"]["trade_returns"]) >= 30
     assert "Mock execution" in result["stdout"]
 
 @patch("shutil.which", return_value="/usr/local/bin/jesse")

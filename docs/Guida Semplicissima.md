@@ -19,6 +19,6 @@ Per verificare se la strategia è robusta, eseguiamo una simulazione statistica 
 
 ---
 ### Note Correlate:
-- [Indice della Documentazione](file:///C:/Users/francesco.bonino/Documents/SQE%20branch/docs/Sovereign_Quant_Engine.md)
-- [Guida Master Completa](file:///C:/Users/francesco.bonino/Documents/SQE%20branch/docs/Guida%20Master%20Completa.md)
-- [Pipeline Deploy IRL](file:///C:/Users/francesco.bonino/Documents/SQE%20branch/docs/Pipeline%20Deploy%20IRL%20Bybit%20Hetzner.md)
+- [Indice della Documentazione](file:///C:/Users/franc/Documents/sovereign-quant-engine/docs/Sovereign_Quant_Engine.md)
+- [Guida Master Completa](file:///C:/Users/franc/Documents/sovereign-quant-engine/docs/Guida%20Master%20Completa.md)
+- [Pipeline Deploy IRL](file:///C:/Users/franc/Documents/sovereign-quant-engine/docs/Pipeline%20Deploy%20IRL%20Bybit%20Hetzner.md)
