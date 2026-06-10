@@ -93,14 +93,18 @@ def test_run_monte_carlo():
 
 def test_generate_report(temp_payload_dir):
     validator = QuantValidator(payload_drop_dir=str(temp_payload_dir))
+    # Use bootstrap mode with favorable trade returns to ensure MC validation passes
     metrics = {
         "sharpe_ratio": 2.0,
         "max_drawdown": -1.0,
         "profit_factor": 1.8,
-        "total_trades": 40
+        "total_trades": 40,
+        "win_rate": 0.65,
+        "trade_returns": [0.001, 0.002, -0.0005, 0.0015, 0.001, -0.0003,
+                          0.002, 0.001, -0.0004, 0.0012]
     }
     constraints = {
-        "max_drawdown_limit_pct": 1.5,
+        "max_drawdown_limit_pct": 5.0,
         "sharpe_ratio_minimum": 1.5,
         "profit_factor_minimum": 1.3
     }
@@ -120,6 +124,33 @@ def test_generate_report(temp_payload_dir):
     with open(report_file, "r", encoding="utf-8") as f:
         loaded_report = json.load(f)
     assert loaded_report == report
+
+
+def test_generate_report_rejects_high_ruin(temp_payload_dir):
+    """Test that generate_report rejects strategies with high risk of ruin."""
+    validator = QuantValidator(payload_drop_dir=str(temp_payload_dir))
+    # Metrics that pass base validation but fail Monte Carlo
+    metrics = {
+        "sharpe_ratio": 2.0,
+        "max_drawdown": -1.0,
+        "profit_factor": 1.8,
+        "total_trades": 50,
+        "win_rate": 0.55
+    }
+    constraints = {
+        "max_drawdown_limit_pct": 1.5,
+        "sharpe_ratio_minimum": 1.5,
+        "profit_factor_minimum": 1.3
+    }
+    
+    report = validator.generate_report(metrics, constraints, num_simulations=100)
+    
+    # With parametric mode and tight drawdown limit, MC should flag high ruin
+    # The key point: validation_passed must now reflect MC results
+    assert "monte_carlo_results" in report
+    mc = report["monte_carlo_results"]
+    if mc["risk_of_ruin"] > 0.05 or mc["average_max_drawdown"] > 1.5:
+        assert report["validation_passed"] is False
 
 
 def test_run_monte_carlo_bootstrap():

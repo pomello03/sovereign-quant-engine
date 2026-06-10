@@ -62,6 +62,16 @@ class DeveloperBridge:
         with open(init_path, "w", encoding="utf-8") as f:
             f.write(init_content)
 
+        # 3. Format and clean generated code using Ruff if installed
+        if "PYTEST_CURRENT_TEST" not in os.environ:
+            try:
+                import subprocess
+                import sys
+                subprocess.run([sys.executable, "-m", "ruff", "check", "--select", "F,E,W,I,U", "--fix", strategy_dir], capture_output=True)
+                subprocess.run([sys.executable, "-m", "ruff", "format", strategy_dir], capture_output=True)
+            except Exception:
+                pass
+
     def execute_closed_loop(self, start_date: str, end_date: str, max_retries: int = 3) -> Dict[str, Any]:
         """
         Executes the backtest; in case of COMPILATION_ERROR, corrects the code and retries.
@@ -172,10 +182,12 @@ class DeveloperBridge:
         class _ConditionTransformer(ast.NodeTransformer):
             def visit_Name(self, node):
                 name_lower = node.id.lower()
-                if name_lower == 'close':
+                # Known Jesse price fields -> self.attribute
+                jesse_price_fields = {'open': 'open', 'high': 'high', 'low': 'low', 'close': 'price', 'volume': 'volume'}
+                if name_lower in jesse_price_fields:
                     return ast.Attribute(
                         value=ast.Name(id='self', ctx=ast.Load()),
-                        attr='price',
+                        attr=jesse_price_fields[name_lower],
                         ctx=ast.Load()
                     )
                 if name_lower in indicator_names:
@@ -270,16 +282,73 @@ class SovereignStrategy(Strategy):
         {should_short_body}
 
     def should_cancel_entry(self) -> bool:
-        return True
+        return False
+
+    @property
+    def atr(self) -> float:
+        # ATR indicator calculation using Jesse ta module
+        return ta.atr(self.candles)
 
     def go_long(self):
-        qty = 1.0
+        # Volatility-based sizing (ATR-based sizing):
+        # Risk amount = Capital * max_position_sizing_pct / 100
+        # Stop distance = ATR * 2
+        # Qty = Risk amount / Stop distance
+        try:
+            stop_distance = self.atr * 2
+            risk_pct = self.hyperparameters['risk']['max_position_sizing_pct'] / 100.0
+            risk_amount = self.capital * risk_pct
+            qty = risk_amount / stop_distance
+        except Exception:
+            # Fallback to default sizing if indicators/candles aren't fully loaded
+            qty = self.capital / self.price
+        
         self.buy = qty, self.price
+        sl_value = self.hyperparameters['risk']['stop_loss_value']
+        tp_value = self.hyperparameters['risk'].get('take_profit_value', sl_value * 2)
+        self.stop_loss = qty, self.price * (1 - sl_value)
+        self.take_profit = qty, self.price * (1 + tp_value)
 
     def go_short(self):
-        qty = 1.0
+        # Volatility-based sizing (ATR-based sizing):
+        try:
+            stop_distance = self.atr * 2
+            risk_pct = self.hyperparameters['risk']['max_position_sizing_pct'] / 100.0
+            risk_amount = self.capital * risk_pct
+            qty = risk_amount / stop_distance
+        except Exception:
+            qty = self.capital / self.price
+        
         self.sell = qty, self.price
+        sl_value = self.hyperparameters['risk']['stop_loss_value']
+        tp_value = self.hyperparameters['risk'].get('take_profit_value', sl_value * 2)
+        self.stop_loss = qty, self.price * (1 + sl_value)
+        self.take_profit = qty, self.price * (1 - tp_value)
+
+
+    def _update_trailing_stop(self):
+        sl_value = self.hyperparameters['risk']['stop_loss_value']
+        if self.is_long:
+            new_sl = self.price * (1 - sl_value)
+            if new_sl > self.average_entry_price * (1 - sl_value):
+                self.stop_loss = self.position.qty, new_sl
+        elif self.is_short:
+            new_sl = self.price * (1 + sl_value)
+            if new_sl < self.average_entry_price * (1 + sl_value):
+                self.stop_loss = self.position.qty, new_sl
+
+    def _update_atr_stop(self):
+        atr_val = self.atr
+        if self.is_long:
+            self.stop_loss = self.position.qty, self.price - atr_val * 2
+        elif self.is_short:
+            self.stop_loss = self.position.qty, self.price + atr_val * 2
 
     def update_position(self):
-        pass
+        # Dynamic stop-loss management based on stop_loss_type
+        sl_type = self.hyperparameters['risk'].get('stop_loss_type', 'fixed')
+        if sl_type == 'trailing':
+            self._update_trailing_stop()
+        elif sl_type == 'atr':
+            self._update_atr_stop()
 """

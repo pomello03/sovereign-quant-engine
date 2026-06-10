@@ -29,3 +29,10 @@ Desktop.ini
 # Virtual Environment
 venv/
 .venv/
+
+# Portable Git utility
+bin/MinGit/
+
+# Personal Access Tokens / keys
+*PAT*
+Personal

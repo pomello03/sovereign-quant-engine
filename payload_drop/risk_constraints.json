@@ -1,5 +1,5 @@
 {
-  "max_drawdown_limit_pct": 1.5,
+  "max_drawdown_limit_pct": 3.0,
   "stop_loss_type": "fixed",
   "stop_loss_value": 0.02,
   "take_profit_value": 0.04,

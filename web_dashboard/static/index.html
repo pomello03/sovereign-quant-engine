@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sovereign Quant Engine - Live Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="glass-bg"></div>
+    <div class="radial-glow"></div>
+
+    <div class="app-container">
+        <!-- HEADER -->
+        <header class="app-header">
+            <div class="logo-area">
+                <div class="logo-hexagon">
+                    <i class="fa-solid fa-microchip logo-icon"></i>
+                </div>
+                <div>
+                    <h1 class="glow-text">SOVEREIGN QUANT ENGINE</h1>
+                    <p class="subtitle">Closed-Loop Risk Management & Static Audit System</p>
+                </div>
+            </div>
+            <div class="system-status">
+                <span class="status-badge" id="system-status-badge">
+                    <span class="status-indicator idle"></span>
+                    <span id="system-status-text">SYSTEM READY</span>
+                </span>
+            </div>
+        </header>
+
+        <!-- MAIN LAYOUT GRID -->
+        <main class="dashboard-grid">
+            
+            <!-- LEFT PANEL: CONTROLS & PIPELINE -->
+            <section class="grid-col col-left">
+                <!-- CONTROLS CARD -->
+                <div class="glass-card controls-card">
+                    <h2 class="card-title"><i class="fa-solid fa-sliders text-amber"></i> Simulation Settings</h2>
+                    <div class="control-group">
+                        <label for="drawdown-limit">Drawdown Limit (%)</label>
+                        <div class="input-wrapper">
+                            <input type="number" id="drawdown-limit" min="0.1" max="10.0" step="0.1" value="1.5">
+                            <span class="unit">%</span>
+                        </div>
+                        <span class="field-desc">Stress test validation drawdown threshold</span>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="max-iterations">Max Optimizer Iterations</label>
+                        <div class="input-wrapper">
+                            <input type="number" id="max-iterations" min="1" max="25" value="10">
+                            <span class="unit"><i class="fa-solid fa-arrows-spin"></i></span>
+                        </div>
+                        <span class="field-desc">Maximum search cycles for risk adjustment</span>
+                    </div>
+
+                    <button class="btn btn-primary" id="start-btn">
+                        <span class="btn-glow"></span>
+                        <i class="fa-solid fa-play"></i> Run Live Simulation
+                    </button>
+                </div>
+
+                <!-- PIPELINE CARD -->
+                <div class="glass-card pipeline-card">
+                    <h2 class="card-title"><i class="fa-solid fa-network-wired text-cyan"></i> Pipeline Stepper</h2>
+                    <div class="stepper">
+                        <div class="step" id="step-supervisor">
+                            <div class="step-num"><i class="fa-solid fa-shield-halved"></i></div>
+                            <div class="step-info">
+                                <h3>Supervisor Validation</h3>
+                                <p>Checking Phase 1 JSON Schemas</p>
+                            </div>
+                            <div class="step-status"><i class="fa-solid fa-circle-notch fa-spin status-spinner"></i><i class="fa-solid fa-circle-check status-check"></i></div>
+                        </div>
+                        <div class="step" id="step-bridge">
+                            <div class="step-num"><i class="fa-solid fa-code"></i></div>
+                            <div class="step-info">
+                                <h3>Developer Bridge</h3>
+                                <p>Strategy Gen & Static Audit Pipeline</p>
+                            </div>
+                            <div class="step-status"><i class="fa-solid fa-circle-notch fa-spin status-spinner"></i><i class="fa-solid fa-circle-check status-check"></i></div>
+                        </div>
+                        <div class="step" id="step-validator">
+                            <div class="step-num"><i class="fa-solid fa-chart-line"></i></div>
+                            <div class="step-info">
+                                <h3>Quant Validator</h3>
+                                <p>Monte Carlo Risk of Ruin & DD Check</p>
+                            </div>
+                            <div class="step-status"><i class="fa-solid fa-circle-notch fa-spin status-spinner"></i><i class="fa-solid fa-circle-check status-check"></i></div>
+                        </div>
+                        <div class="step" id="step-optimizer">
+                            <div class="step-num"><i class="fa-solid fa-gears"></i></div>
+                            <div class="step-info">
+                                <h3>Parameter Optimizer</h3>
+                                <p>Closed-Loop Parameter Fine-tuning</p>
+                            </div>
+                            <div class="step-status"><i class="fa-solid fa-circle-notch fa-spin status-spinner"></i><i class="fa-solid fa-circle-check status-check"></i></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RIGHT PANEL: INTERACTIVE CHARTS & LIVE METRICS -->
+            <section class="grid-col col-right">
+                
+                <!-- METRICS PANEL -->
+                <div class="metrics-grid">
+                    <div class="metric-card glass-card" id="card-sharpe">
+                        <div class="metric-header">
+                            <span>SHARPE RATIO</span>
+                            <i class="fa-solid fa-gauge-high text-cyan"></i>
+                        </div>
+                        <div class="metric-value text-cyan" id="metric-sharpe">-</div>
+                        <div class="metric-footer" id="metric-sharpe-status">Waiting...</div>
+                    </div>
+                    <div class="metric-card glass-card" id="card-pf">
+                        <div class="metric-header">
+                            <span>PROFIT FACTOR</span>
+                            <i class="fa-solid fa-money-bill-trend-up text-emerald"></i>
+                        </div>
+                        <div class="metric-value text-emerald" id="metric-pf">-</div>
+                        <div class="metric-footer" id="metric-pf-status">Waiting...</div>
+                    </div>
+                    <div class="metric-card glass-card" id="card-dd">
+                        <div class="metric-header">
+                            <span>MAX DRAWDOWN</span>
+                            <i class="fa-solid fa-arrow-trend-down text-rose"></i>
+                        </div>
+                        <div class="metric-value text-rose" id="metric-dd">-</div>
+                        <div class="metric-footer" id="metric-dd-status">Waiting...</div>
+                    </div>
+                    <div class="metric-card glass-card" id="card-ruin">
+                        <div class="metric-header">
+                            <span>RISK OF RUIN</span>
+                            <i class="fa-solid fa-triangle-exclamation text-amber"></i>
+                        </div>
+                        <div class="metric-value text-amber" id="metric-ruin">-</div>
+                        <div class="metric-footer" id="metric-ruin-status">Waiting...</div>
+                    </div>
+                </div>
+
+                <!-- CHART CARD -->
+                <div class="glass-card chart-card">
+                    <div class="chart-header">
+                        <h2 class="card-title"><i class="fa-solid fa-chart-area text-amber"></i> Closed-Loop Optimization Path</h2>
+                        <div class="chart-legend">
+                            <span class="legend-item"><span class="legend-color ruin"></span> Risk of Ruin</span>
+                            <span class="legend-item"><span class="legend-color sizing"></span> Position Sizing</span>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="opt-chart"></canvas>
+                        <div class="chart-placeholder" id="chart-placeholder-text">
+                            <i class="fa-solid fa-chart-line text-slate-500"></i>
+                            <p>No active run. Start a simulation to visualize optimization convergence.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TERMINAL LOGS CARD -->
+                <div class="glass-card logs-card">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="dot red"></span>
+                            <span class="dot yellow"></span>
+                            <span class="dot green"></span>
+                        </div>
+                        <span class="terminal-title">LIVE COMPILATION & BACKTEST CONSOLE</span>
+                        <button class="clear-terminal-btn" id="clear-btn"><i class="fa-solid fa-trash-can"></i> Clear</button>
+                    </div>
+                    <div class="terminal-body" id="terminal-body">
+                        <div class="log-line system">[SYSTEM] Sovereign Quant Engine Web Portal Ready.</div>
+                        <div class="log-line system">[SYSTEM] Click "Run Live Simulation" to start.</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- VERDICT MODAL overlay -->
+    <div class="modal-overlay" id="verdict-modal">
+        <div class="verdict-box glass-card scale-in">
+            <div class="verdict-header">
+                <div class="verdict-icon-container" id="verdict-icon-container">
+                    <i class="fa-solid fa-shield-check" id="verdict-icon"></i>
+                </div>
+                <h2 id="verdict-title">STRATEGY APPROVED</h2>
+                <p id="verdict-subtitle">Sovereign Strategy successfully meets all risk limits</p>
+            </div>
+            
+            <div class="verdict-stats">
+                <div class="verdict-stat-item">
+                    <span class="label">Final Sizing</span>
+                    <span class="val" id="v-sizing">-</span>
+                </div>
+                <div class="verdict-stat-item">
+                    <span class="label">Final Stop Loss</span>
+                    <span class="val" id="v-sl">-</span>
+                </div>
+                <div class="verdict-stat-item">
+                    <span class="label">Average Drawdown</span>
+                    <span class="val" id="v-avg-dd">-</span>
+                </div>
+                <div class="verdict-stat-item">
+                    <span class="label">Peak Drawdown</span>
+                    <span class="val" id="v-peak-dd">-</span>
+                </div>
+                <div class="verdict-stat-item">
+                    <span class="label">Risk of Ruin</span>
+                    <span class="val" id="v-ruin">-</span>
+                </div>
+            </div>
+
+            <div class="verdict-actions">
+                <button class="btn btn-secondary" id="close-modal-btn">Dismiss Dashboard</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- HELP MODAL overlay -->
+    <div class="modal-overlay" id="help-modal">
+        <div class="verdict-box glass-card scale-in" style="max-width: 600px;">
+            <div class="verdict-header">
+                <div class="verdict-icon-container success" id="help-icon-container" style="background: rgba(6, 182, 212, 0.15); border-color: var(--color-cyan); color: #06b6d4;">
+                    <i class="fa-solid fa-circle-info" id="help-icon"></i>
+                </div>
+                <h2 id="help-title">Metric Explanation</h2>
+                <p id="help-subtitle" style="margin-top: 6px; font-weight: 500; font-size: 13px;">Detailed breakdown of system concepts</p>
+            </div>
+            
+            <div class="verdict-stats" style="text-align: left; line-height: 1.6; font-size: 14px; font-family: var(--font-outfit);">
+                <p id="help-description" style="color: var(--color-text-main); font-weight: 400;"></p>
+                <div id="help-bullets" style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 16px;"></div>
+            </div>
+
+            <div class="verdict-actions" style="margin-top: 24px;">
+                <button class="btn btn-primary" id="close-help-btn" style="background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%); color: #fff; box-shadow: 0 4px 20px rgba(8, 145, 178, 0.3);">Close Explanation</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

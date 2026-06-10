@@ -47,7 +47,39 @@ class QuantValidator:
 
         return True
 
-    def run_monte_carlo(self, metrics: dict, num_simulations: int = 100, drawdown_limit: float = 2.0) -> dict:
+    def validate_with_monte_carlo(self, metrics: dict, constraints: dict,
+                                  mc_results: dict,
+                                  max_risk_of_ruin: float = 0.05) -> bool:
+        """
+        Full validation: base metric checks + Monte Carlo stress test results.
+
+        A strategy must pass all base metric constraints AND the Monte Carlo
+        stress test must show acceptable risk of ruin and average drawdown.
+
+        Args:
+            metrics: dict of backtest metrics
+            constraints: dict of risk constraints
+            mc_results: dict returned by run_monte_carlo()
+            max_risk_of_ruin: maximum acceptable probability of ruin (default 5%)
+
+        Returns:
+            bool: True only if both base metrics and MC stress test pass.
+        """
+        if not self.validate_metrics(metrics, constraints):
+            return False
+
+        # Monte Carlo Risk of Ruin gate
+        if mc_results.get("risk_of_ruin", 1.0) > max_risk_of_ruin:
+            return False
+
+        # Monte Carlo Average Max Drawdown gate
+        dd_limit = constraints.get("max_drawdown_limit_pct", 2.0)
+        if mc_results.get("average_max_drawdown", float("inf")) > dd_limit:
+            return False
+
+        return True
+
+    def run_monte_carlo(self, metrics: dict, num_simulations: int = 100, drawdown_limit: float = 2.0, seed: int = None) -> dict:
         """
         Runs a Monte Carlo simulation of trade returns based on metrics to estimate
         the probability of drawdown exceeding the limit (Risk of Ruin).
@@ -63,6 +95,7 @@ class QuantValidator:
             metrics: dict of backtest metrics
             num_simulations: number of simulation paths to run
             drawdown_limit: drawdown limit in percent (e.g. 2.0 for 2.0%)
+            seed: optional random seed for reproducible results (default None = stochastic)
             
         Returns:
             dict with simulation results (risk_of_ruin, average_max_drawdown, etc.)
@@ -86,18 +119,23 @@ class QuantValidator:
         
         # Pre-compute log-normal parameters for parametric mode
         if not use_bootstrap:
-            mean_win = profit_factor * 0.01
-            sigma_win = 0.005
+            # Scale simulated returns based on actual backtest max drawdown (baseline reference of 10.0%)
+            abs_max_dd = abs(metrics.get("max_drawdown") or 10.0)
+            scale_factor = max(0.0001, abs_max_dd / 10.0)
+            
+            mean_win = profit_factor * 0.01 * scale_factor
+            sigma_win = 0.005 * scale_factor
             mu_win = math.log(mean_win) - 0.5 * sigma_win ** 2
-            mean_loss = 0.01
-            sigma_loss = 0.003
+            mean_loss = 0.01 * scale_factor
+            sigma_loss = 0.003 * scale_factor
             mu_loss = math.log(mean_loss) - 0.5 * sigma_loss ** 2
         
         ruin_count = 0
         max_drawdowns = []
         
-        # Set random seed for deterministic/testable results
-        random.seed(42)
+        # Set random seed if provided (for deterministic/testable results)
+        if seed is not None:
+            random.seed(seed)
         
         for _ in range(num_simulations):
             equity = 100.0
@@ -108,7 +146,7 @@ class QuantValidator:
                 # Non-parametric bootstrap: sample from actual trade returns
                 sim_returns = random.choices(trade_returns, k=total_trades)
                 for trade_return in sim_returns:
-                    equity = equity * (1 + trade_return)
+                    equity = max(0.0, equity * (1 + trade_return))
                     if equity > peak_equity:
                         peak_equity = equity
                     else:
@@ -123,7 +161,7 @@ class QuantValidator:
                     else:
                         trade_return = -random.lognormvariate(mu_loss, sigma_loss)
                         
-                    equity = equity * (1 + trade_return)
+                    equity = max(0.0, equity * (1 + trade_return))
                     if equity > peak_equity:
                         peak_equity = equity
                     else:
@@ -164,8 +202,11 @@ class QuantValidator:
         """
         drawdown_limit = constraints.get("max_drawdown_limit_pct", 2.0)
         
-        validation_passed = self.validate_metrics(metrics, constraints)
         mc_results = self.run_monte_carlo(metrics, num_simulations, drawdown_limit)
+        # Full validation: base metrics + Monte Carlo stress test
+        validation_passed = self.validate_with_monte_carlo(
+            metrics, constraints, mc_results
+        )
         
         report = {
             "metrics": metrics,

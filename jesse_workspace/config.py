@@ -1,15 +1,17 @@
 # jesse_workspace/config.py
 # Reference: https://docs.jesse.trade/
 
+import os
+
 config = {
     # database connection details
     'databases': {
         'postgres': {
-            'host': 'localhost',
-            'port': 5432,
-            'database': 'jesse_db',
-            'username': 'jesse_user',
-            'password': 'jesse_password',
+            'host': os.environ.get('DB_HOST', 'localhost'),
+            'port': int(os.environ.get('DB_PORT', 5432)),
+            'database': os.environ.get('DB_NAME', 'jesse_db'),
+            'username': os.environ.get('DB_USER', 'jesse_user'),
+            'password': os.environ.get('DB_PASSWORD', 'jesse_password'),
             'schema': 'public',
         }
     },
