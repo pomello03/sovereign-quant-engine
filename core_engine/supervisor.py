@@ -3,21 +3,31 @@ import json
 from datetime import datetime, timezone
 import jsonschema
 from jsonschema import validate, ValidationError
+from core_engine.state_io import atomic_write_json, read_json_fresh, StaleStateError
 
 class RuinBiasViolationError(ValueError):
     """Exception raised when the max drawdown limit exceeds 2.0%."""
     pass
 
 class Supervisor:
-    def __init__(self, schemas_dir: str = None, payload_drop_dir: str = None):
+    def __init__(self, schemas_dir: str = None, payload_drop_dir: str = None,
+                 max_spec_age_seconds: float = None):
         """
         Initialize the Supervisor with schemas directory and payload drop directory.
+
+        Args:
+            max_spec_age_seconds: when set, ``alpha_spec.json`` must be fresher
+                than this many seconds or a StaleStateError is raised. Guards
+                against acting on a silently-failed upstream agent (Vuln 1).
+                Default None disables the check (suitable for demos/tests that
+                read committed fixtures).
         """
         # Resolve paths relative to project root if not specified
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        
+
         self.schemas_dir = schemas_dir or os.path.join(base_dir, "schemas")
         self.payload_drop_dir = payload_drop_dir or os.path.join(base_dir, "payload_drop")
+        self.max_spec_age_seconds = max_spec_age_seconds
         
         # Load schemas
         self.alpha_schema = self._load_schema("alpha_spec.json")
@@ -52,12 +62,14 @@ class Supervisor:
             if not os.path.exists(path):
                 raise FileNotFoundError(f"Required specification file '{name}' not found at {path}")
 
-        # Load files
-        with open(alpha_path, "r", encoding="utf-8") as f:
-            try:
-                alpha_data = json.load(f)
-            except json.JSONDecodeError as e:
-                raise ValidationError(f"Invalid JSON format in alpha_spec.json: {e}") from e
+        # Load files. alpha_spec is the upstream agent's signal handoff, so it
+        # gets a freshness guard against silent-failure stale signals (Vuln 1).
+        try:
+            alpha_data = read_json_fresh(alpha_path, max_age_seconds=self.max_spec_age_seconds)
+        except StaleStateError:
+            raise
+        except json.JSONDecodeError as e:
+            raise ValidationError(f"Invalid JSON format in alpha_spec.json: {e}") from e
 
         with open(risk_path, "r", encoding="utf-8") as f:
             try:
@@ -136,9 +148,8 @@ class Supervisor:
             raise ValidationError(f"Generated strategy blueprint validation error{prefix}: {e.message}") from e
 
 
-        # Write output blueprint file
-        os.makedirs(os.path.dirname(blueprint_path), exist_ok=True)
-        with open(blueprint_path, "w", encoding="utf-8") as f:
-            json.dump(blueprint, f, indent=2)
+        # Write output blueprint atomically so a concurrent reader (the
+        # Developer Bridge) never observes a partial blueprint (Vuln 1/3).
+        atomic_write_json(blueprint_path, blueprint, indent=2)
 
         return blueprint

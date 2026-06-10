@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sovereign Quant Engine — Validation Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background: #09090b;
+            background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.13), transparent);
+            min-height: 100vh;
+        }
+        .glass {
+            background: rgba(24, 24, 27, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(39, 39, 42, 0.5);
+        }
+        .glow-emerald { box-shadow: 0 0 24px rgba(16, 185, 129, 0.25); }
+        .glow-rose { box-shadow: 0 0 24px rgba(244, 63, 94, 0.25); }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+        .stepper-node { cursor: pointer; transition: all 0.2s ease; }
+        .stepper-node:hover { background: rgba(63, 63, 70, 0.3); }
+        .stepper-node.active { background: rgba(99, 102, 241, 0.12); border-color: rgba(99, 102, 241, 0.4) !important; }
+        .code-token-kw { color: #c4b5fd; }
+        .code-token-str { color: #6ee7b7; }
+        .code-token-com { color: #52525b; font-style: italic; }
+        .code-token-num { color: #fda4af; }
+        #code-drawer { transition: max-height 0.35s ease; overflow: hidden; }
+    </style>
+</head>
+<body class="text-zinc-100 font-sans">
+    <div class="flex min-h-screen">
+
+        <!-- ============ Fixed Sidebar ============ -->
+        <aside class="w-80 shrink-0 fixed inset-y-0 left-0 glass border-r border-zinc-800/50 flex flex-col overflow-y-auto z-10">
+            <!-- Brand -->
+            <div class="p-6 border-b border-zinc-800/50">
+                <div class="flex items-center gap-3">
+                    <div class="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
+                        <i data-lucide="activity" class="h-5 w-5 text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-base font-bold tracking-tight">Sovereign Quant</h1>
+                        <p class="text-[11px] text-zinc-500">Validation Dashboard</p>
+                    </div>
+                </div>
+                <div id="verdict-badge" class="mt-5"><!-- populated by dashboard_app.js --></div>
+            </div>
+
+            <!-- Strategy parameters -->
+            <div class="p-6 border-b border-zinc-800/50">
+                <h2 class="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-4 flex items-center gap-2">
+                    <i data-lucide="sliders-horizontal" class="h-3.5 w-3.5"></i> Parametri Strategia
+                </h2>
+                <div id="strategy-params" class="space-y-2 text-sm"><!-- populated --></div>
+            </div>
+
+            <!-- Optimizer stepper -->
+            <div class="p-6 flex-1">
+                <h2 class="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-4 flex items-center gap-2">
+                    <i data-lucide="git-commit-vertical" class="h-3.5 w-3.5"></i> Ottimizzatore — Storico
+                </h2>
+                <div id="optimizer-stepper" class="space-y-1"><!-- populated --></div>
+            </div>
+        </aside>
+
+        <!-- ============ Main Content ============ -->
+        <main class="flex-1 ml-80 p-8 space-y-6 max-w-[1400px]">
+
+            <!-- Header -->
+            <header class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold tracking-tight bg-gradient-to-r from-zinc-100 to-zinc-400 bg-clip-text text-transparent">
+                        Stochastic Validation Report
+                    </h1>
+                    <p class="text-sm text-zinc-500 mt-1">Validated at <span id="validated-at" class="text-zinc-300 font-mono text-xs">—</span></p>
+                </div>
+                <div id="iteration-banner" class="hidden glass rounded-xl px-4 py-2 text-sm text-indigo-300 border-indigo-500/30"></div>
+            </header>
+
+            <!-- Bento metrics grid -->
+            <section class="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                <div class="glass rounded-2xl p-5 hover:border-indigo-500/30 transition-colors">
+                    <div class="flex items-center justify-between text-zinc-500 text-xs font-semibold uppercase tracking-wider">
+                        <span>Sharpe Ratio</span>
+                        <i data-lucide="trending-up" class="h-4 w-4 text-indigo-400"></i>
+                    </div>
+                    <p id="metric-sharpe" class="text-3xl font-extrabold font-mono mt-3 text-indigo-300">—</p>
+                    <p id="metric-sharpe-sub" class="text-[11px] text-zinc-600 mt-1">&nbsp;</p>
+                </div>
+                <div class="glass rounded-2xl p-5 hover:border-rose-500/30 transition-colors">
+                    <div class="flex items-center justify-between text-zinc-500 text-xs font-semibold uppercase tracking-wider">
+                        <span>Max Drawdown</span>
+                        <i data-lucide="trending-down" class="h-4 w-4 text-rose-400"></i>
+                    </div>
+                    <p id="metric-maxdd" class="text-3xl font-extrabold font-mono mt-3 text-rose-400">—</p>
+                    <p id="metric-maxdd-sub" class="text-[11px] text-zinc-600 mt-1">&nbsp;</p>
+                </div>
+                <div class="glass rounded-2xl p-5 hover:border-emerald-500/30 transition-colors">
+                    <div class="flex items-center justify-between text-zinc-500 text-xs font-semibold uppercase tracking-wider">
+                        <span>Profit Factor</span>
+                        <i data-lucide="bar-chart-3" class="h-4 w-4 text-emerald-400"></i>
+                    </div>
+                    <p id="metric-pf" class="text-3xl font-extrabold font-mono mt-3 text-emerald-400">—</p>
+                    <p id="metric-pf-sub" class="text-[11px] text-zinc-600 mt-1">&nbsp;</p>
+                </div>
+                <div class="glass rounded-2xl p-5 hover:border-amber-500/30 transition-colors">
+                    <div class="flex items-center justify-between text-zinc-500 text-xs font-semibold uppercase tracking-wider">
+                        <span>Risk of Ruin</span>
+                        <i data-lucide="alert-triangle" class="h-4 w-4 text-amber-400"></i>
+                    </div>
+                    <p id="metric-ruin" class="text-3xl font-extrabold font-mono mt-3 text-amber-300">—</p>
+                    <p id="metric-ruin-sub" class="text-[11px] text-zinc-600 mt-1">&nbsp;</p>
+                </div>
+            </section>
+
+            <!-- Equity chart -->
+            <section class="glass rounded-2xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="font-bold">Monte Carlo Equity Trajectories</h3>
+                        <p id="equity-chart-sub" class="text-xs text-zinc-500 mt-0.5">—</p>
+                    </div>
+                    <div class="flex items-center gap-4 text-[11px] text-zinc-500">
+                        <span class="flex items-center gap-1.5"><span class="h-0.5 w-5 bg-indigo-300 inline-block rounded"></span> Backtest reale</span>
+                        <span class="flex items-center gap-1.5"><span class="h-0.5 w-5 bg-indigo-500/30 inline-block rounded"></span> Simulazioni</span>
+                    </div>
+                </div>
+                <div class="h-72"><canvas id="equityChart"></canvas></div>
+            </section>
+
+            <!-- Drawdown chart + MC stats -->
+            <section class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                <div class="glass rounded-2xl p-6 xl:col-span-2">
+                    <h3 class="font-bold mb-4">Drawdown Trajectories <span class="text-xs font-normal text-zinc-500">(%)</span></h3>
+                    <div class="h-56"><canvas id="drawdownChart"></canvas></div>
+                </div>
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="font-bold mb-4">Monte Carlo Stats</h3>
+                    <div id="mc-stats" class="divide-y divide-zinc-800/60 text-sm"><!-- populated --></div>
+                </div>
+            </section>
+
+            <!-- Strategy code drawer -->
+            <section class="glass rounded-2xl overflow-hidden">
+                <button id="code-drawer-toggle" class="w-full flex items-center justify-between p-5 hover:bg-zinc-800/30 transition-colors">
+                    <span class="font-bold flex items-center gap-2">
+                        <i data-lucide="code-2" class="h-4 w-4 text-violet-400"></i>
+                        Strategy Code <span class="text-xs font-normal text-zinc-500">SovereignStrategy/__init__.py</span>
+                    </span>
+                    <i data-lucide="chevron-down" class="h-4 w-4 text-zinc-500 transition-transform" id="code-drawer-chevron"></i>
+                </button>
+                <div id="code-drawer" style="max-height: 0;">
+                    <pre class="p-5 pt-0 text-xs font-mono leading-relaxed text-zinc-300 overflow-x-auto"><code id="strategy-code">// no strategy code available</code></pre>
+                </div>
+            </section>
+
+            <footer class="text-center text-[11px] text-zinc-700 pb-4">
+                Sovereign Quant Engine — auto-generated artifact. Source templates: core_engine/templates/
+            </footer>
+        </main>
+    </div>
+
+    <!-- Report data injected by core_engine/quant_validator.py -->
+    <script>
+        const SQE_REPORT_DATA = /* REPORT_JSON_PLACEHOLDER */;
+    </script>
+    <script src="dashboard_app.js"></script>
+</body>
+</html>

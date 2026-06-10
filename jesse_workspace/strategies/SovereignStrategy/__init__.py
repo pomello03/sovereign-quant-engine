@@ -7,23 +7,63 @@ from .params import params
 
 
 class SovereignStrategy(Strategy):
+    # Minimum exchange-API move (fraction of price) before re-sending a stop
+    # order, to avoid order-modification spamming and HTTP 429 bans (Vuln 4).
+    TRAIL_MIN_MOVE_PCT = 0.002
+
+    def __init__(self):
+        super().__init__()
+        # Historical price extreme tracked for a unidirectional trailing stop.
+        self._trail_peak = None
+        self._last_sent_sl = None
+
     @property
     def current_regime(self) -> str:
-        return "trending_bullish"
+        return 'trending_bullish'
 
     @property
     def hyperparameters(self):
-        if isinstance(params, dict) and "default" in params:
-            return params.get(self.current_regime, params.get("default", params))
+        if isinstance(params, dict) and 'default' in params:
+            return params.get(self.current_regime, params.get('default', params))
         return params
 
+    @staticmethod
+    def _is_valid_number(value) -> bool:
+        # Rejects None, NaN (value != value) and +/-inf.
+        return (
+            isinstance(value, (int, float))
+            and value == value
+            and value not in (float('inf'), float('-inf'))
+        )
+
+    def _safe_indicator(self, calc, min_candles: int, fallback: float) -> float:
+        # Guards indicator getters against cold-start NaN/None propagation (Vuln 2).
+        if self.candles is None or len(self.candles) < min_candles:
+            return fallback
+        try:
+            value = calc()
+        except Exception:
+            return fallback
+        return self._coerce_number(value, fallback)
+
+    def _coerce_number(self, value, fallback: float) -> float:
+        # Reduces a possible series to its last element, then validates it.
+        if hasattr(value, '__len__'):
+            value = value[-1] if len(value) else fallback
+        return value if self._is_valid_number(value) else fallback
     @property
     def rsi(self) -> float:
-        return ta.rsi(self.candles, period=14)
+        return self._safe_indicator(
+            lambda: ta.rsi(self.candles, period=14),
+            min_candles=15, fallback=50.0,
+        )
 
     @property
     def sma(self) -> float:
-        return ta.sma(self.candles, period=50)
+        return self._safe_indicator(
+            lambda: ta.sma(self.candles, period=50),
+            min_candles=51, fallback=self.price,
+        )
 
     def should_long(self) -> bool:
         # Long entry conditions:
@@ -42,55 +82,88 @@ class SovereignStrategy(Strategy):
 
     @property
     def atr(self) -> float:
-        # ATR indicator calculation using Jesse ta module
-        return ta.atr(self.candles)
+        # Robust ATR getter: positive fallback avoids div-by-zero in sizing.
+        return self._safe_indicator(
+            lambda: ta.atr(self.candles),
+            min_candles=20, fallback=(self.price * 0.01),
+        )
 
-    def go_long(self):
-        # Volatility-based sizing (ATR-based sizing):
-        # Risk amount = Capital * max_position_sizing_pct / 100
-        # Stop distance = ATR * 2
-        # Qty = Risk amount / Stop distance
+    def _position_qty(self) -> float:
+        # Volatility-based (ATR) sizing with a NaN/zero-safe fallback (Vuln 2):
+        # Risk amount = Capital * max_position_sizing_pct / 100; Qty = risk / (ATR * 2)
         try:
             stop_distance = self.atr * 2
-            risk_pct = self.hyperparameters["risk"]["max_position_sizing_pct"] / 100.0
-            risk_amount = self.capital * risk_pct
-            qty = risk_amount / stop_distance
+            risk_pct = self.hyperparameters['risk']['max_position_sizing_pct'] / 100.0
+            qty = (self.capital * risk_pct) / stop_distance
         except Exception:
-            # Fallback to default sizing if indicators/candles aren't fully loaded
+            qty = None
+        if not self._is_valid_number(qty) or qty <= 0:
+            # Fallback to default sizing if indicators/candles aren't fully loaded.
             qty = self.capital / self.price
+        return qty
 
+    def go_long(self):
+        qty = self._position_qty()
         self.buy = qty, self.price
-        sl_value = self.hyperparameters["risk"]["stop_loss_value"]
-        tp_value = self.hyperparameters["risk"].get("take_profit_value", sl_value * 2)
+        sl_value = self.hyperparameters['risk']['stop_loss_value']
+        tp_value = self.hyperparameters['risk'].get('take_profit_value', sl_value * 2)
         self.stop_loss = qty, self.price * (1 - sl_value)
         self.take_profit = qty, self.price * (1 + tp_value)
 
     def go_short(self):
-        # Volatility-based sizing (ATR-based sizing):
-        try:
-            stop_distance = self.atr * 2
-            risk_pct = self.hyperparameters["risk"]["max_position_sizing_pct"] / 100.0
-            risk_amount = self.capital * risk_pct
-            qty = risk_amount / stop_distance
-        except Exception:
-            qty = self.capital / self.price
-
+        qty = self._position_qty()
         self.sell = qty, self.price
-        sl_value = self.hyperparameters["risk"]["stop_loss_value"]
-        tp_value = self.hyperparameters["risk"].get("take_profit_value", sl_value * 2)
+        sl_value = self.hyperparameters['risk']['stop_loss_value']
+        tp_value = self.hyperparameters['risk'].get('take_profit_value', sl_value * 2)
         self.stop_loss = qty, self.price * (1 + sl_value)
         self.take_profit = qty, self.price * (1 - tp_value)
 
     def _update_trailing_stop(self):
-        sl_value = self.hyperparameters["risk"]["stop_loss_value"]
+        # Trailing stop hardened against API spamming and direction violation (Vuln 4):
+        # track the historical price extreme, derive the stop from it (so it only
+        # moves favourably), and re-send only past TRAIL_MIN_MOVE_PCT. Logic is
+        # split into small helpers to keep cyclomatic complexity low.
         if self.is_long:
-            new_sl = self.price * (1 - sl_value)
-            if new_sl > self.average_entry_price * (1 - sl_value):
-                self.stop_loss = self.position.qty, new_sl
+            self._trail_side(is_long=True)
         elif self.is_short:
-            new_sl = self.price * (1 + sl_value)
-            if new_sl < self.average_entry_price * (1 + sl_value):
-                self.stop_loss = self.position.qty, new_sl
+            self._trail_side(is_long=False)
+        else:
+            self._trail_peak = None      # flat: reset state for the next position
+            self._last_sent_sl = None
+
+    def _trail_side(self, is_long: bool):
+        self._update_peak(is_long)
+        new_sl = self._trailing_sl(is_long)
+        # Unidirectional + throttled: never move against the position, and only
+        # re-send the order past TRAIL_MIN_MOVE_PCT.
+        favorable = self._is_favorable_move(new_sl, is_long)
+        if favorable and self._should_resend_stop(new_sl):
+            self.stop_loss = self.position.qty, new_sl
+            self._last_sent_sl = new_sl
+
+    def _update_peak(self, is_long: bool):
+        if self._trail_peak is None or self._is_new_extreme(is_long):
+            self._trail_peak = self.price
+
+    def _trailing_sl(self, is_long: bool) -> float:
+        sl_value = self.hyperparameters['risk']['stop_loss_value']
+        factor = (1 - sl_value) if is_long else (1 + sl_value)
+        return self._trail_peak * factor
+
+    def _is_new_extreme(self, is_long: bool) -> bool:
+        peak = self._trail_peak
+        return self.price > peak if is_long else self.price < peak
+
+    def _is_favorable_move(self, new_sl: float, is_long: bool) -> bool:
+        if self._last_sent_sl is None:
+            return True
+        return new_sl > self._last_sent_sl if is_long else new_sl < self._last_sent_sl
+
+    def _should_resend_stop(self, new_sl: float) -> bool:
+        # Throttles exchange order modifications to avoid HTTP 429 bans.
+        if self._last_sent_sl is None:
+            return True
+        return abs(new_sl - self._last_sent_sl) / self.price >= self.TRAIL_MIN_MOVE_PCT
 
     def _update_atr_stop(self):
         atr_val = self.atr
@@ -101,8 +174,8 @@ class SovereignStrategy(Strategy):
 
     def update_position(self):
         # Dynamic stop-loss management based on stop_loss_type
-        sl_type = self.hyperparameters["risk"].get("stop_loss_type", "fixed")
-        if sl_type == "trailing":
+        sl_type = self.hyperparameters['risk'].get('stop_loss_type', 'fixed')
+        if sl_type == 'trailing':
             self._update_trailing_stop()
-        elif sl_type == "atr":
+        elif sl_type == 'atr':
             self._update_atr_stop()

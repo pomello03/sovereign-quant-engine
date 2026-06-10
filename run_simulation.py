@@ -52,8 +52,17 @@ def main():
         with open(os.path.join(base_dir, "payload_drop", "risk_constraints.json"), "r") as f:
             constraints = json.load(f)
             
+        # Read the generated strategy code for the dashboard code drawer
+        strategy_code = None
+        code_path = os.path.join(base_dir, "jesse_workspace", "strategies",
+                                 "SovereignStrategy", "__init__.py")
+        if os.path.exists(code_path):
+            with open(code_path, "r", encoding="utf-8") as f:
+                strategy_code = f.read()
+
         # Unified report generation (calls validation and Monte Carlo internally)
-        report = validator.generate_report(metrics, constraints, num_simulations=1000)
+        report = validator.generate_report(metrics, constraints, num_simulations=1000,
+                                           blueprint=blueprint, strategy_code=strategy_code)
         
         print(f">> Metrics meet risk constraints? {'YES' if report['validation_passed'] else 'NO'}")
         

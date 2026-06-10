@@ -240,3 +240,33 @@ class TestRiskOptimizer:
             assert mock_exec.call_count == 3
             # generate_report should only be called on the SUCCESS iteration
             mock_report.assert_called_once()
+
+    def test_optimize_records_history(self, setup_optimizer):
+        """Each attempt is recorded in optimization_history and passed to generate_report."""
+        optimizer = setup_optimizer
+
+        with patch.object(
+            optimizer.bridge, "generate_strategy_code"
+        ), patch.object(
+            optimizer.bridge, "execute_closed_loop",
+            return_value={"status": "SUCCESS", "metrics": _good_metrics()}
+        ), patch.object(
+            optimizer.validator, "generate_report",
+            return_value=_passing_report()
+        ) as mock_report:
+
+            optimizer.optimize_risk_parameters(max_iterations=5)
+
+            assert len(optimizer.optimization_history) == 1
+            entry = optimizer.optimization_history[0]
+            assert entry["iteration"] == 1
+            assert entry["params"]["max_position_sizing_pct"] == 2.0
+            assert entry["params"]["stop_loss_value"] == 0.02
+            assert entry["metrics"]["sharpe_ratio"] == 2.5
+            assert "risk_of_ruin" in entry
+            assert "validation_passed" in entry
+            # The history list is forwarded to generate_report for the dashboard stepper
+            kwargs = mock_report.call_args.kwargs
+            assert kwargs["optimization_history"] is optimizer.optimization_history
+            assert kwargs["blueprint"] is not None
+            assert kwargs["mc_results"] is not None

@@ -15,10 +15,22 @@ class MCPJesseRunner:
         """
         self.workspace_path = os.path.abspath(workspace_path)
 
+    @staticmethod
+    def _mock_trade_returns(pos_sizing_pct: float):
+        """
+        Builds a deterministic sample of >= 30 per-trade returns whose
+        dispersion scales with position sizing. Used only for mock/fallback
+        backtests so the validator exercises the unbiased bootstrap path.
+        """
+        magnitude = max(pos_sizing_pct, 0.01) / 100.0  # e.g. 2.0% -> 0.02 per winning trade
+        wins = [magnitude] * 24            # 60% win rate
+        losses = [-1.1 * magnitude] * 16   # losers slightly larger than winners
+        return wins + losses
+
     def run_backtest(self, start_date: str, end_date: str) -> Dict[str, Any]:
         """
         Runs the backtest using the Jesse CLI command: jesse backtest <start_date> <end_date>
-        
+
         Returns a dict with:
         - status: "SUCCESS", "COMPILATION_ERROR", or "ERROR"
         - metrics: Dict of extracted metrics (if status is "SUCCESS")
@@ -115,13 +127,17 @@ class MCPJesseRunner:
         # 1. Check if jesse CLI is in the PATH
         jesse_installed = shutil.which("jesse") is not None
         
-        # Robust default mock metrics for fallback scenarios
+        # Robust default mock metrics for fallback scenarios. Includes a
+        # realistic per-trade returns sample so the validator can run an
+        # unbiased bootstrap Monte Carlo (>= MIN_REAL_TRADES) instead of the
+        # look-ahead-prone parametric fallback (Vuln 5).
         mock_metrics = {
             "sharpe_ratio": 1.85,
             "max_drawdown": -12.4,
-            "total_trades": 42,
+            "total_trades": 40,
             "profit_factor": 1.45,
-            "win_rate": 0.55
+            "win_rate": 0.55,
+            "trade_returns": self._mock_trade_returns(2.0)
         }
 
         # Load blueprint to generate dynamic mock metrics if running in fallback/simulation
@@ -145,9 +161,13 @@ class MCPJesseRunner:
                 mock_metrics = {
                     "sharpe_ratio": simulated_sharpe,
                     "max_drawdown": simulated_drawdown,
-                    "total_trades": 42,
+                    "total_trades": 40,
                     "profit_factor": round(0.04 / sl, 2),
-                    "win_rate": 0.55
+                    "win_rate": 0.55,
+                    # Per-trade swings scale with position sizing: shrinking the
+                    # position lowers dispersion -> lower simulated risk of ruin,
+                    # which is what lets the RiskOptimizer converge.
+                    "trade_returns": self._mock_trade_returns(pos_sizing)
                 }
             except Exception:
                 pass

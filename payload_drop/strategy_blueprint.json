@@ -25,12 +25,12 @@
     ]
   },
   "risk": {
-    "max_drawdown_limit_pct": 1.5,
+    "max_drawdown_limit_pct": 2.0,
     "stop_loss_type": "fixed",
     "stop_loss_value": 0.02,
     "take_profit_value": 0.04,
     "risk_to_reward_minimum": 2.0,
-    "max_position_sizing_pct": 0.5
+    "max_position_sizing_pct": 0.125
   },
   "context": {
     "market_regime": "trending_bullish",
@@ -38,6 +38,6 @@
     "trend_strength": "strong",
     "volatility_state": "normal"
   },
-  "generated_at": "2026-06-09T10:47:54.799364Z",
+  "generated_at": "2026-06-10T04:18:35.246978Z",
   "supervisor_verdict": "APPROVED"
 }
