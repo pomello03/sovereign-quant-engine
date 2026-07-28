@@ -282,6 +282,9 @@ class QuantValidator:
             "metrics": metrics,
             "constraints": constraints,
             "validation_passed": validation_passed,
+            # True when the metrics came from the mock path (Jesse absent or no
+            # candles), i.e. every number in this report is fabricated.
+            "is_mock": bool(metrics.get("is_mock", False)),
             "monte_carlo_results": mc_results,
             "optimization_history": optimization_history or [],
             "strategy_blueprint": blueprint,
