@@ -1,6 +1,7 @@
 import os
 import json
 import ast
+import shutil
 from typing import Dict, Any, List
 from core_engine.supervisor import Supervisor
 from core_engine.mcp_executor import MCPJesseRunner
@@ -64,13 +65,19 @@ class DeveloperBridge:
         with open(init_path, "w", encoding="utf-8") as f:
             f.write(init_content)
 
-        # 3. Format and clean generated code using Ruff if installed
+        # 3. Format and clean generated code using Ruff if installed.
+        # Prefer the `ruff` on PATH over `python -m ruff`: ruff is commonly
+        # installed globally rather than in the project venv, in which case
+        # `sys.executable -m ruff` fails silently and the generated code ships
+        # unformatted. This mirrors run_tool() in bin/sqe-audit.sh.
         if "PYTEST_CURRENT_TEST" not in os.environ:
             try:
                 import subprocess
                 import sys
-                subprocess.run([sys.executable, "-m", "ruff", "check", "--select", "F,E,W,I,U", "--fix", strategy_dir], capture_output=True)
-                subprocess.run([sys.executable, "-m", "ruff", "format", strategy_dir], capture_output=True)
+                ruff_exe = shutil.which("ruff")
+                ruff_cmd = [ruff_exe] if ruff_exe else [sys.executable, "-m", "ruff"]
+                subprocess.run(ruff_cmd + ["check", "--select", "F,E,W,I,U", "--fix", strategy_dir], capture_output=True)
+                subprocess.run(ruff_cmd + ["format", strategy_dir], capture_output=True)
             except Exception:
                 pass
 
@@ -362,13 +369,25 @@ class SovereignStrategy(Strategy):
             min_candles=20, fallback=(self.price * 0.01),
         )
 
+    def _stop_distance(self, ref_price: float = None) -> float:
+        # Single source of truth for how far the stop sits from entry. Sizing and
+        # the stop order MUST read the same number: if sizing assumes ATR*2 while
+        # the stop is placed at a fixed percentage, the risk actually taken per
+        # trade is not max_position_sizing_pct but an arbitrary function of
+        # volatility.
+        ref = ref_price if self._is_valid_number(ref_price) else self.price
+        risk = self.hyperparameters['risk']
+        if risk.get('stop_loss_type', 'fixed') == 'atr':
+            return self.atr * 2
+        return ref * risk['stop_loss_value']
+
     def _position_qty(self) -> float:
-        # Volatility-based (ATR) sizing with a NaN/zero-safe fallback (Vuln 2):
-        # Risk amount = Capital * max_position_sizing_pct / 100; Qty = risk / (ATR * 2)
+        # Risk-based sizing with a NaN/zero-safe fallback (Vuln 2):
+        # risk amount = capital * max_position_sizing_pct / 100, and that amount
+        # is what is lost if the stop is hit, so qty = risk / stop distance.
         try:
-            stop_distance = self.atr * 2
             risk_pct = self.hyperparameters['risk']['max_position_sizing_pct'] / 100.0
-            qty = (self.capital * risk_pct) / stop_distance
+            qty = (self.capital * risk_pct) / self._stop_distance()
         except Exception:
             qty = None
         if not self._is_valid_number(qty) or qty <= 0:
@@ -381,7 +400,7 @@ class SovereignStrategy(Strategy):
         self.buy = qty, self.price
         sl_value = self.hyperparameters['risk']['stop_loss_value']
         tp_value = self.hyperparameters['risk'].get('take_profit_value', sl_value * 2)
-        self.stop_loss = qty, self.price * (1 - sl_value)
+        self.stop_loss = qty, self.price - self._stop_distance()
         self.take_profit = qty, self.price * (1 + tp_value)
 
     def go_short(self):
@@ -389,7 +408,7 @@ class SovereignStrategy(Strategy):
         self.sell = qty, self.price
         sl_value = self.hyperparameters['risk']['stop_loss_value']
         tp_value = self.hyperparameters['risk'].get('take_profit_value', sl_value * 2)
-        self.stop_loss = qty, self.price * (1 + sl_value)
+        self.stop_loss = qty, self.price + self._stop_distance()
         self.take_profit = qty, self.price * (1 - tp_value)
 
     def _update_trailing_stop(self):
@@ -420,9 +439,9 @@ class SovereignStrategy(Strategy):
             self._trail_peak = self.price
 
     def _trailing_sl(self, is_long: bool) -> float:
-        sl_value = self.hyperparameters['risk']['stop_loss_value']
-        factor = (1 - sl_value) if is_long else (1 + sl_value)
-        return self._trail_peak * factor
+        # Same stop distance as entry sizing, measured from the price extreme.
+        distance = self._stop_distance(self._trail_peak)
+        return self._trail_peak - distance if is_long else self._trail_peak + distance
 
     def _is_new_extreme(self, is_long: bool) -> bool:
         peak = self._trail_peak
@@ -440,11 +459,11 @@ class SovereignStrategy(Strategy):
         return abs(new_sl - self._last_sent_sl) / self.price >= self.TRAIL_MIN_MOVE_PCT
 
     def _update_atr_stop(self):
-        atr_val = self.atr
+        distance = self._stop_distance()
         if self.is_long:
-            self.stop_loss = self.position.qty, self.price - atr_val * 2
+            self.stop_loss = self.position.qty, self.price - distance
         elif self.is_short:
-            self.stop_loss = self.position.qty, self.price + atr_val * 2
+            self.stop_loss = self.position.qty, self.price + distance
 
     def update_position(self):
         # Dynamic stop-loss management based on stop_loss_type

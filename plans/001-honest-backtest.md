@@ -2,7 +2,11 @@
 
 **Priorità:** P0 (prima di ogni altra cosa)
 **Scritto contro commit:** `a537770`
-**Stato:** TODO
+**Stato:** step di codice fatti (T1, T2, T3) — restano gli step manuali A1–A4, che dipendono da Docker
+
+> **Aggiornamento 2026-07-28.** Gli step che non richiedono il tuo intervento sono stati applicati: date configurabili, etichetta `is_mock`, coerenza sizing/stop. Restano i quattro buchi qui sotto e tutta la parte manuale (Docker, import candele, backtest dentro Jesse).
+>
+> Correzione al testo originale: le date `2026-01-01 → 2026-06-01` **non sono più nel futuro** (oggi è luglio 2026). Restavano comunque sbagliate perché coprivano solo 5 mesi e non le due finestre di verifica.
 
 ---
 
@@ -19,6 +23,17 @@ Risultato: ogni "PASSED" verde è aritmetica garantita, non mercato. Finché è 
 L'obiettivo di questo piano è ottenere **un singolo backtest vero**, misurato su candele reali. Non aggiungere feature. Non rendere "production-grade". Solo: spegnere la finzione.
 
 Insight chiave (lente ponytail): il primo backtest onesto **non richiede di riparare questa pipeline**. Jesse è uno strumento completo con la sua UI. Il percorso più pigro che funziona è far girare la strategia dentro Jesse standalone, separatamente dal motore SQE. La pipeline SQE si aggancia *dopo*.
+
+---
+
+## I quattro buchi di questo piano (aggiunti dopo revisione)
+
+Il piano identificava il nodo giusto ma ignorava quattro cose che vanno fatte **insieme** al primo backtest, altrimenti il numero "vero" è comunque bugiardo:
+
+1. **Commissioni e funding.** Un backtest a costi zero non è onesto. Su BTC-USDT perpetual: ~0,1% andata e ritorno + funding ogni 8h. Su un target del 4% i costi possono ribaltare un vantaggio marginale. Vanno configurati esplicitamente in Jesse, non lasciati a default.
+2. **Il limite del 2% è una trappola.** Il Supervisor *e* lo schema JSON impongono `max_drawdown_limit_pct ≤ 2.0`, con posizione 2% e stop 2%. Con questi numeri il sistema non può perdere in modo significativo — e quindi neanche guadagnare. Al primo backtest reale o fallisce sul limite (e l'ottimizzatore rimpicciolisce le posizioni finché "passa": stesso auto-inganno con dati veri), o passa perché il guadagno è ~zero. **La domanda "c'è un vantaggio?" si misura sul guadagno medio per operazione al netto dei costi, non sul cancelletto del drawdown.**
+3. **"FALLITA" ≠ "non abbastanza dati."** Sotto ~30 operazioni il risultato non è un verdetto, è rumore. Vanno distinti.
+4. **Servono due finestre, non una.** Con un blocco solo prima o poi aggiusti i parametri finché diventa verde. Finestra A `2023-01-01 → 2024-06-30` (default in `run_simulation.py`) per scegliere; finestra B `2024-07-01 → 2025-12-31` **mai toccata** finché i parametri non sono congelati.
 
 ---
 
@@ -70,25 +85,22 @@ Se sia A che B falliscono per ragioni d'ambiente: STOP e riporta il blocco preci
 
 Questi hanno senso solo nel momento in cui i numeri diventano veri. Sono fix piccoli; falli quando arrivi al backtest, non come pre-lavoro.
 
-### Step T1 — Date di backtest reali (one-liner)
-- `run_simulation.py:32` ha hardcoded `start_date="2026-01-01", end_date="2026-06-01"` (futuro → nessun dato).
-- Sostituire con un periodo passato reale, es. `start_date="2023-01-01", end_date="2024-12-31"`.
-- **Se vuoi una guardia invece di una data fissa:** una riga che rifiuta `end_date` oltre `oggi - 7 giorni`. Opzionale, non obbligatoria.
+### Step T1 — Date di backtest reali ✅ FATTO
+- `run_simulation.py` ora accetta `--start` / `--end`, con default sulla finestra A (`2023-01-01 → 2024-06-30`).
+- Per la finestra B: `python run_simulation.py --start 2024-07-01 --end 2025-12-31`.
 
-### Step T2 — Non farsi ingannare dal mock (mitigazione 2 righe, NON uno STRICT_MODE)
+### Step T2 — Non farsi ingannare dal mock ✅ FATTO (2 righe, NON uno STRICT_MODE)
 - Il deliverable B1 di GLM propone un intero sistema `STRICT_MODE`. È sovra-ingegnerizzato.
-- Minimo che basta: in `mcp_executor.py`, quando si ritorna il path mock (es. riga 176-181), aggiungere `"is_mock": True` al dict ritornato, e propagarlo come banner/campo nel `validation_report.json`. Così qualunque report finto è etichettato come tale.
+- `"is_mock": True` viaggia dentro il dict delle metriche mock (`mcp_executor.py`), quindi arriva da solo a `validation_report.json` senza toccare i cinque punti di return.
+- Reso visibile in tre punti: campo `is_mock` nel report, banner ambra "DATI FINTI" nella dashboard (`core_engine/templates/dashboard_app.js`), avviso a schermo in `run_simulation.py`.
 - `# ponytail: flag is_mock invece di un sistema di env-flag; aggiungi STRICT_MODE solo se il mock viene usato in CI dove deve fallire hard.`
-- **Verifica:** un run senza Jesse produce un report con `is_mock: true` visibile.
+- **Verificato:** run senza Jesse → `is_mock: true` nel report e banner in dashboard.
 
-### Step T3 — Bug sizing ATR×2 vs stop fisso (fix concettuale, poche righe)
-- Nel codice generato (`jesse_workspace/strategies/SovereignStrategy/__init__.py`) e nel **template che lo genera** in `core_engine/developer_bridge.py`:
-  - `_position_qty()` (riga ~99) dimensiona con `stop_distance = self.atr * 2`.
-  - `go_long()` (riga ~114) piazza lo stop a `self.price * (1 - sl_value)` → **base diversa**.
-- Fix minimo: rendere coerenti le due basi. O lo stop usa `ATR*2` (`stop_price = self.price - self.atr * 2`), o il sizing usa la stessa percentuale fissa dello stop. Una delle due, non entrambe le basi.
-- **Importante:** il fix va nel **template del generatore** (`developer_bridge.py`), non solo nel file generato, altrimenti il prossimo run lo sovrascrive.
-- Nota: GLM dice "rischio 3-4× più alto" — la *direzione* è sbagliata (su BTC volatile la posizione risulta troppo *piccola*), ma l'incoerenza da sistemare è reale.
-- **Verifica:** rigenerare la strategia (`python run_simulation.py`) e controllare che sizing e stop usino la stessa base.
+### Step T3 — Bug sizing ATR×2 vs stop fisso ✅ FATTO
+- Il template in `core_engine/developer_bridge.py` ora ha un solo `_stop_distance()`, usato da `_position_qty()`, `go_long()`, `go_short()`, `_trailing_sl()` e `_update_atr_stop()`. Una sola base per tutti.
+- `_stop_distance()` rispetta `stop_loss_type`: `atr` → `ATR*2`, altrimenti percentuale fissa. Il rischio per operazione ora è davvero `max_position_sizing_pct`, non una funzione arbitraria della volatilità.
+- Nota: GLM diceva "rischio 3-4× più alto" — la *direzione* era sbagliata (su BTC volatile la posizione risultava troppo *piccola*), ma l'incoerenza era reale.
+- **Verificato:** strategia rigenerata, 91/91 test passano, audit statico passa.
 
 ### Step T4 — Coerenza exchange (one-liner doc)
 - `routes.py:5` usa `Binance Perpetual`; i `docs/` citano Bybit. Scegliere UNO.

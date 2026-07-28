@@ -94,13 +94,24 @@
      * ---------------------------------------------------------------- */
     function renderVerdict(passed) {
         const badge = $('verdict-badge');
-        badge.innerHTML = passed
+        // A mock run means no market was ever touched: say so above the verdict,
+        // otherwise APPROVED reads as a real result.
+        const mockWarning = report.is_mock
+            ? '<div class="rounded-xl border border-amber-500/50 bg-amber-500/10 px-4 py-3 mb-3">' +
+              '<div class="flex items-center gap-2 mb-1">' +
+              '<i data-lucide="alert-triangle" class="h-5 w-5 text-amber-400"></i>' +
+              '<span class="font-bold text-amber-300 tracking-wide">DATI FINTI</span></div>' +
+              '<p class="text-[11px] leading-snug text-amber-200/80">Jesse non ha eseguito nessun backtest. ' +
+              'Tutti i numeri di questa pagina sono calcolati dai parametri di rischio, non misurati sul mercato. ' +
+              'Non usarli per decidere.</p></div>'
+            : '';
+        badge.innerHTML = mockWarning + (passed
             ? '<div class="glow-emerald rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 flex items-center gap-2">' +
               '<i data-lucide="shield-check" class="h-5 w-5 text-emerald-400"></i>' +
               '<span class="font-bold text-emerald-300 tracking-wide">APPROVED</span></div>'
             : '<div class="glow-rose rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 flex items-center gap-2">' +
               '<i data-lucide="shield-x" class="h-5 w-5 text-rose-400"></i>' +
-              '<span class="font-bold text-rose-300 tracking-wide">REJECTED</span></div>';
+              '<span class="font-bold text-rose-300 tracking-wide">REJECTED</span></div>');
     }
 
     function paramRow(label, value) {

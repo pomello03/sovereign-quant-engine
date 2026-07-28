@@ -137,7 +137,11 @@ class MCPJesseRunner:
             "total_trades": 40,
             "profit_factor": 1.45,
             "win_rate": 0.55,
-            "trade_returns": self._mock_trade_returns(2.0)
+            "trade_returns": self._mock_trade_returns(2.0),
+            # Marks every metric below as fabricated, not measured. Rides along
+            # with the metrics dict so it reaches validation_report.json and the
+            # dashboard without threading a flag through five return sites.
+            "is_mock": True
         }
 
         # Load blueprint to generate dynamic mock metrics if running in fallback/simulation
@@ -167,7 +171,8 @@ class MCPJesseRunner:
                     # Per-trade swings scale with position sizing: shrinking the
                     # position lowers dispersion -> lower simulated risk of ruin,
                     # which is what lets the RiskOptimizer converge.
-                    "trade_returns": self._mock_trade_returns(pos_sizing)
+                    "trade_returns": self._mock_trade_returns(pos_sizing),
+                    "is_mock": True
                 }
             except Exception:
                 pass
