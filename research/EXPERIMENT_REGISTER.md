@@ -76,6 +76,30 @@ Un segnale passa **solo se soddisfa tutte e tre** le condizioni:
 **In nessuno di questi casi si modificano soglie, si aggiungono segnali o si riesegue il test.**
 Se il risultato non piace, il risultato resta.
 
-### Esito
+### Esito — eseguito 2026-08-03, una volta sola
 
-*(da compilare dopo l'esecuzione, in un commit successivo)*
+| segnale | n | netto | maxDD | win % | percentile | esito |
+|---|---:|---:|---:|---:|---:|---|
+| S1 breakout Donchian 20 | 148 | −17.8 % | 42.5 % | 35.1 % | 46.7 % | fallito |
+| S2 rsi(14) < 30 | 118 | −30.4 % | 39.6 % | 32.2 % | 20.9 % | fallito |
+| S3 banda di Bollinger inferiore | 193 | −38.3 % | 48.4 % | 33.2 % | 22.0 % | fallito |
+| S4 ema20 × ema50 | 50 | **+8.1 %** | 12.4 % | 40.0 % | 75.3 % | fallito |
+| S5 momentum 30 barre | 337 | −50.8 % | 68.8 % | 33.8 % | 26.3 % | fallito |
+| S6 pullback in trend | 63 | −14.0 % | 26.0 % | 33.3 % | 34.3 % | fallito |
+| C0 sma(50) *(riferimento)* | 120 | −4.9 % | 27.1 % | 36.7 % | 57.8 % | — |
+
+**0 candidati su 6 hanno superato la soglia.**
+
+S4 è l'unico con rendimento positivo e il drawdown più basso, e va nominato perché è
+esattamente il risultato che invita a barare: 50 trade, +8.1 %, e il **75.3° percentile** contro
+il 99.17° richiesto. Tre quarti degli ingressi casuali fanno peggio; un quarto fa meglio. Con
+50 osservazioni è ciò che il caso produce senza sforzo. Promuoverlo — o riaprire il test con
+soglie diverse, o aggiungere un settimo segnale — sarebbe la stessa operazione che
+`optimizer.py` faceva dimezzando il position size finché il verdetto non girava.
+
+**Validazione del metodo:** C0 qui dà −4.9 % su 120 trade; il simulatore Jesse completo su
+1,3 milioni di candele a 1 minuto aveva dato −4.78 % su 120 trade. Le due strade concordano,
+quindi il risultato non è un artefatto della scorciatoia di calcolo.
+
+**Conseguenza, per la regola scritta sopra:** il progetto si ferma alla ricerca.
+Nessun capitale, nessun layer di esecuzione. Vedi [`RESULT_DOMAIN.md`](RESULT_DOMAIN.md).

@@ -7,8 +7,9 @@
 
 ## Stato corrente in una frase
 
-Il pipeline ha certificato `PASSED`, con `risk_of_ruin: 0.0` e cinque iterazioni di ottimizzazione,
-una strategia che su cinque anni di candele reali **non apre nemmeno una posizione** (V10).
+Il motore ora misura onestamente e **non esiste una strategia da misurare**: sei segnali standard
+testati una volta sola con regole pre-registrate, nessuno vicino alla soglia (V13).
+Il progetto si ferma alla ricerca — nessun capitale, nessun layer di esecuzione.
 
 ## Decisioni prese
 
@@ -16,6 +17,26 @@ una strategia che su cinque anni di candele reali **non apre nemmeno una posizio
 |---|---|---|---|
 | D1 | **Venue: Bybit** | 2026-08-03 | `routes.py:5` (`'Binance Perpetual'`) va allineato |
 | D2 | **Strumento: spot** | 2026-08-03 | niente leva/liquidazione/funding; `entry_short_conditions` non eseguibile; layer di esecuzione ~5 giorni invece di ~5 settimane; fee 0.1 % per lato |
+| D3 | **Limite drawdown 2 % abbandonato → 20 %** | 2026-08-03 | non raggiungibile: BTC è oltre il 2 % sotto il proprio massimo il 91.6 % del tempo, e 0/1000 percorsi casuali sono rimasti sotto. Aggiunto `max_risk_per_trade_pct` — è ciò che il 2 % governava davvero. Tetto di schema 30 % (V13) |
+| D4 | **Stop alla ricerca** | 2026-08-03 | EXP-001: 0 candidati su 6 superano la soglia pre-registrata. Nessun capitale, nessun Gate D. Riaprire richiede un'ipotesi di mercato *con un meccanismo*, registrata prima di guardare i dati |
+
+### V13 — Non esiste una strategia, e adesso è misurato (EXP-001)
+Regole committate **prima** dell'esecuzione (`3429720`), sei candidati, uscite identiche,
+soglia al 99.17° percentile (Bonferroni, α = 0.05):
+
+```
+S1 donchian    148 tr  -17.8%   46.7° pct       S5 momentum   337 tr  -50.8%   26.3° pct
+S2 rsi<30      118 tr  -30.4%   20.9° pct       S6 pullback    63 tr  -14.0%   34.3° pct
+S3 bollinger   193 tr  -38.3%   22.0° pct       C0 sma50 rif. 120 tr   -4.9%   57.8° pct
+S4 ema cross    50 tr   +8.1%   75.3° pct   <- unico positivo, e il caso fa meglio 1 volta su 4
+```
+
+Il numero che spiega tutto: win rate del caso puro **35.42 %**, pareggio dopo commissioni
+**36.66 %**, incrocio SMA **36.67 %**. L'edge di un segnale di trend classico e il pedaggio
+commissionale hanno la stessa taglia a due decimali.
+
+Metodo validato: C0 dà −4.9 % qui e −4.78 % dal simulatore Jesse completo.
+Dettaglio in [`research/RESULT_DOMAIN.md`](research/RESULT_DOMAIN.md).
 
 ---
 

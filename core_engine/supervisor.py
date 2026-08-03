@@ -6,8 +6,29 @@ from jsonschema import validate, ValidationError
 from core_engine.state_io import atomic_write_json, read_json_fresh, StaleStateError
 
 class RuinBiasViolationError(ValueError):
-    """Exception raised when the max drawdown limit exceeds 2.0%."""
+    """Raised when the declared drawdown limit exceeds MAX_DRAWDOWN_CEILING_PCT."""
     pass
+
+
+# The ceiling a blueprint's drawdown limit may declare.
+#
+# This was 2.0, and 2.0 was not achievable on this instrument. Measured on five
+# years of Bybit spot BTCUSDT (research/RESULT_DOMAIN.md):
+#
+#   - BTC's own max drawdown is 77% over the full history, and 53% inside a
+#     window it finished up 38% in.
+#   - BTC sits more than 2% below its own peak 91.6% of the time.
+#   - Of 1000 random 120-trade paths with a 2% stop, zero kept drawdown under 2%.
+#
+# A long-only spot strategy inherits the instrument's drawdown scaled by its
+# exposure. Reaching 2% account drawdown against a 53% instrument drawdown means
+# roughly 4% exposure, which at retail capital falls below the exchange's 5 USDT
+# minimum order — the limit and the venue cannot both be satisfied.
+#
+# 30.0 is a ceiling on what may be *declared*, not a target. It exists so the
+# number stays a deliberate choice rather than a free parameter; the guardrail
+# that matters day to day is risk per trade and the notional cap.
+MAX_DRAWDOWN_CEILING_PCT = 30.0
 
 class Supervisor:
     def __init__(self, schemas_dir: str = None, payload_drop_dir: str = None,
@@ -105,13 +126,13 @@ class Supervisor:
             prefix = f" at {path_str}" if path_str else ""
             raise ValidationError(f"Context regime validation error{prefix}: {e.message}") from e
 
-        # Explicit Ruin Bias check (Invariant 2): limit <= 2.0%
-        # (Though schemas/risk_constraints.json also specifies a maximum of 2.0,
-        # we explicitly check and raise our custom RuinBiasViolationError)
+        # Explicit Ruin Bias check. The schema caps this too; the redundant
+        # check exists so the failure carries its own named exception.
         max_dd = risk_data.get("max_drawdown_limit_pct")
-        if max_dd is None or max_dd > 2.0:
+        if max_dd is None or max_dd > MAX_DRAWDOWN_CEILING_PCT:
             raise RuinBiasViolationError(
-                f"Ruin Bias Violation: max_drawdown_limit_pct ({max_dd}) exceeds maximum allowed 2.0%"
+                f"Ruin Bias Violation: max_drawdown_limit_pct ({max_dd}) exceeds "
+                f"maximum allowed {MAX_DRAWDOWN_CEILING_PCT}%"
             )
 
         # Cross-validation: check that take_profit_value / stop_loss_value >= risk_to_reward_minimum

@@ -2,7 +2,11 @@ import os
 import json
 import pytest
 from jsonschema import ValidationError
-from core_engine.supervisor import Supervisor, RuinBiasViolationError
+from core_engine.supervisor import (
+    MAX_DRAWDOWN_CEILING_PCT,
+    RuinBiasViolationError,
+    Supervisor,
+)
 
 # Real schemas directory
 REAL_SCHEMAS_DIR = os.path.join(
@@ -109,13 +113,14 @@ def test_supervisor_invalid_context_enum(temp_payload_dir, valid_payloads):
 
 def test_supervisor_ruin_bias_violation(temp_payload_dir, valid_payloads):
     alpha, risk, context = valid_payloads
-    # Max drawdown > 2.0%
-    risk["max_drawdown_limit_pct"] = 2.5
+    # Above the declared ceiling. The ceiling is 30.0, not 2.0: see
+    # supervisor.MAX_DRAWDOWN_CEILING_PCT and research/RESULT_DOMAIN.md for why
+    # 2.0 was unreachable on this instrument.
+    risk["max_drawdown_limit_pct"] = MAX_DRAWDOWN_CEILING_PCT + 5
     write_payload_files(temp_payload_dir, alpha, risk, context)
-    
+
     supervisor = Supervisor(schemas_dir=REAL_SCHEMAS_DIR, payload_drop_dir=str(temp_payload_dir))
-    # It can raise either ValidationError (since schema maximum is 2.0) or RuinBiasViolationError.
-    # In either case, it must reject the payload.
+    # Either the schema maximum or the explicit check may fire first; both refuse.
     with pytest.raises((ValidationError, RuinBiasViolationError)):
         supervisor.validate_and_generate()
 

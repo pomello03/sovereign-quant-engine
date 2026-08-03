@@ -3,7 +3,11 @@ import time
 import json
 import pytest
 from jsonschema import ValidationError
-from core_engine.supervisor import Supervisor, RuinBiasViolationError
+from core_engine.supervisor import (
+    MAX_DRAWDOWN_CEILING_PCT,
+    RuinBiasViolationError,
+    Supervisor,
+)
 from core_engine.developer_bridge import DeveloperBridge
 from core_engine.quant_validator import MissingMetricError, QuantValidator
 from core_engine.state_io import StaleStateError
@@ -139,10 +143,22 @@ class TestSupervisorEdgeCases:
                                 max_spec_age_seconds=60)
         assert supervisor.validate_and_generate()["supervisor_verdict"] == "APPROVED"
 
-    def test_supervisor_boundary_drawdown_exactly_2(self, temp_payload_dir, valid_payloads):
-        """max_drawdown_limit_pct=2.0 is exactly on the boundary and should pass."""
+    def test_supervisor_drawdown_ceiling_boundary(self, temp_payload_dir, valid_payloads):
+        """Exactly on the ceiling passes; a hair over does not.
+
+        The ceiling moved from 2.0 to 30.0 because 2.0 was not reachable on this
+        instrument: BTC is more than 2% below its own peak 91.6% of the time, and
+        zero of 1000 random 120-trade paths stayed under it. See
+        research/RESULT_DOMAIN.md and supervisor.MAX_DRAWDOWN_CEILING_PCT.
+        """
         alpha, risk, context = valid_payloads
-        risk["max_drawdown_limit_pct"] = 2.0
+        risk["max_drawdown_limit_pct"] = MAX_DRAWDOWN_CEILING_PCT + 0.1
+        write_payload_files(temp_payload_dir, alpha, risk, context)
+        supervisor = Supervisor(schemas_dir=REAL_SCHEMAS_DIR, payload_drop_dir=str(temp_payload_dir))
+        with pytest.raises((ValidationError, RuinBiasViolationError)):
+            supervisor.validate_and_generate()
+
+        risk["max_drawdown_limit_pct"] = MAX_DRAWDOWN_CEILING_PCT
         write_payload_files(temp_payload_dir, alpha, risk, context)
 
         supervisor = Supervisor(schemas_dir=REAL_SCHEMAS_DIR, payload_drop_dir=str(temp_payload_dir))
