@@ -103,3 +103,97 @@ quindi il risultato non è un artefatto della scorciatoia di calcolo.
 
 **Conseguenza, per la regola scritta sopra:** il progetto si ferma alla ricerca.
 Nessun capitale, nessun layer di esecuzione. Vedi [`RESULT_DOMAIN.md`](RESULT_DOMAIN.md).
+
+---
+
+## EXP-002 · Momentum cross-sectional sull'universo spot
+
+**Registrato:** 2026-08-04, prima dell'esecuzione. Lo script
+[`run_prereg_exp002.py`](run_prereg_exp002.py) è committato insieme a questa voce e non viene
+modificato dopo aver visto i risultati.
+
+**Motivo.** EXP-001 ha chiesto *"quando comprare Bitcoin"* e ha risposto che l'edge di
+temporizzazione dei segnali classici ha la stessa taglia della commissione (36.67 % contro
+36.66 % di pareggio). Questa è una domanda diversa: *"quali monete tenere"*.
+
+### Perché potrebbe funzionare — il meccanismo, non il grafico
+
+Tre ragioni, e la prima è quella che ha ucciso EXP-001:
+
+1. **Il pedaggio cambia di scala.** Ribilanciando ogni 28 giorni si paga lo 0.2 % su un periodo
+   in cui la dispersione fra la moneta migliore e la peggiore dell'universo è tipicamente di
+   decine di punti percentuali. Il cuscinetto passa da ~2× a ~100×.
+2. **Esiste una ragione perché qualcuno stia dall'altra parte.** Le monete minori sono meno
+   seguite e meno arbitraggiate, e il flusso di capitale retail vi si muove in modo lento e
+   correlato. Non è una linea su un grafico: è un vincolo su altri partecipanti.
+3. **È documentato.** Momentum e size cross-sectional sono fra i pochi risultati che sopravvivono
+   nella letteratura accademica sulle criptovalute, non solo nei blog.
+
+### Configurazione primaria — una sola, fissata ora
+
+| parametro | valore |
+|---|---|
+| universo | tutte le coppie spot USDT di Bybit, candele giornaliere |
+| finestra | 2023-01-01 → 2026-07-01 |
+| lookback | **90 giorni** |
+| posizioni tenute | **top 5**, equipesate |
+| ribilanciamento | ogni **28 giorni** |
+| filtro di liquidità | turnover giornaliero mediano ≥ **100.000 $** sul lookback |
+| commissioni | 0.1 % per lato, applicate **solo alla frazione di portafoglio sostituita** |
+| periodi minimi | 20 |
+
+Nessuno stop, nessun target: si tiene fino al ribilanciamento successivo. Aggiungere uscite
+sarebbe aggiungere parametri.
+
+### Baseline — la barra è la selezione casuale
+
+| # | baseline | ruolo |
+|---|---|---|
+| B1 | **5 monete a caso** dallo stesso insieme eleggibile a ogni ribilanciamento, 10.000 ripetizioni | **è questa la barra** |
+| B2 | universo eleggibile equipesato | "comprare tutto" |
+| B3 | BTC comprato e tenuto | l'alternativa ingenua |
+
+Battere BTC non dimostrerebbe nulla: dimostrerebbe che le altcoin sono salite. L'unico confronto
+che isola la **scelta** è contro chi sceglie a caso dallo stesso insieme.
+
+### Criterio di superamento — tutte e tre
+
+1. Rendimento netto **sopra il 95° percentile** di B1. Un'unica ipotesi primaria, quindi nessuna
+   correzione di Bonferroni: α = 0.05.
+2. Rendimento netto **positivo**.
+3. **Superiore all'universo equipesato** (B2). Altrimenti conviene comprare tutto e basta.
+
+### La griglia di sensibilità non può far passare nulla
+
+Vengono riportate anche 12 combinazioni di lookback e K. Sono **descrittive**. Una cella che
+supera la barra **non costituisce un superamento**. Se la primaria fallisce e qualche cella
+riesce, quella è evidenza di **sensibilità ai parametri**, che è l'aspetto che ha il rumore —
+non un risultato da promuovere.
+
+### Bias di sopravvivenza — dichiarato, non risolto
+
+L'endpoint di Bybit elenca **solo le coppie ancora quotate oggi**. Le monete delistate, collassate
+o silenziosamente morte sono assenti, e la loro assenza gonfia qualunque risultato calcolato su
+ciò che resta. Non è correggibile da questa fonte dati.
+
+**Ciò che salva il confronto:** la baseline B1 pesca dallo *stesso* universo di sopravvissute,
+quindi eredita esattamente lo stesso bias. Il rendimento assoluto è gonfiato; il **percentile
+rispetto al caso** resta interpretabile. È la ragione per cui la barra è B1 e non un numero
+assoluto.
+
+### Cosa succede dopo — deciso ora
+
+- **Fallisce** → la conclusione onesta diventa: battere il mercato con dati di prezzo pubblici e
+  commissioni retail non è raggiungibile da questa postazione. Il progetto si ferma, e si ferma
+  con evidenza invece che per stanchezza.
+- **Passa** → è l'**unico** candidato, e va al protocollo completo di
+  [`VALIDATION_AND_LIVE_GATES.md`](../docs/VALIDATION_AND_LIVE_GATES.md) su una finestra mai
+  aperta. Prima di qualunque capitale va inoltre risolto il bias di sopravvivenza con una fonte
+  dati che includa i delisting — perché un risultato che dipende dal non aver visto i morti non è
+  un risultato.
+
+**In nessuno dei due casi si modificano soglie, si aggiungono configurazioni o si riesegue.**
+
+### Esito
+
+*(da compilare dopo l'esecuzione, in un commit successivo)*
