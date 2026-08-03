@@ -28,7 +28,7 @@ class SovereignStrategy(Strategy):
 
     @property
     def current_regime(self) -> str:
-        return "trending_bullish"
+        return 'trending_bullish'
 
     @property
     def regime_params(self):
@@ -37,8 +37,8 @@ class SovereignStrategy(Strategy):
         # setup; shadowing it with a dict-returning property made every route
         # fail at startup with "'dict' object is not callable" — which nothing
         # noticed, because no route had ever been started.
-        if isinstance(params, dict) and "default" in params:
-            return params.get(self.current_regime, params.get("default", params))
+        if isinstance(params, dict) and 'default' in params:
+            return params.get(self.current_regime, params.get('default', params))
         return params
 
     @staticmethod
@@ -47,7 +47,7 @@ class SovereignStrategy(Strategy):
         return (
             isinstance(value, (int, float))
             and value == value
-            and value not in (float("inf"), float("-inf"))
+            and value not in (float('inf'), float('-inf'))
         )
 
     def _safe_indicator(self, calc, min_candles: int, fallback: float) -> float:
@@ -62,24 +62,21 @@ class SovereignStrategy(Strategy):
 
     def _coerce_number(self, value, fallback: float) -> float:
         # Reduces a possible series to its last element, then validates it.
-        if hasattr(value, "__len__"):
+        if hasattr(value, '__len__'):
             value = value[-1] if len(value) else fallback
         return value if self._is_valid_number(value) else fallback
-
     @property
     def rsi(self) -> float:
         return self._safe_indicator(
             lambda: ta.rsi(self.candles, period=14),
-            min_candles=15,
-            fallback=50.0,
+            min_candles=15, fallback=50.0,
         )
 
     @property
     def sma(self) -> float:
         return self._safe_indicator(
             lambda: ta.sma(self.candles, period=50),
-            min_candles=51,
-            fallback=self.price,
+            min_candles=51, fallback=self.price,
         )
 
     def should_long(self) -> bool:
@@ -102,8 +99,7 @@ class SovereignStrategy(Strategy):
         # Robust ATR getter: positive fallback avoids div-by-zero in sizing.
         return self._safe_indicator(
             lambda: ta.atr(self.candles),
-            min_candles=20,
-            fallback=(self.price * 0.01),
+            min_candles=20, fallback=(self.price * 0.01),
         )
 
     def _stop_distance(self) -> float:
@@ -112,11 +108,11 @@ class SovereignStrategy(Strategy):
         # the risk taken equals the risk declared. Sizing off `atr * 2` while
         # stopping at `price * (1 - sl_value)` made those two differ by whatever
         # ratio volatility happened to have that day.
-        risk = self.regime_params["risk"]
-        if risk.get("stop_loss_type") == "atr":
+        risk = self.regime_params['risk']
+        if risk.get('stop_loss_type') == 'atr':
             distance = self.atr * 2
         else:
-            distance = self.price * risk["stop_loss_value"]
+            distance = self.price * risk['stop_loss_value']
         if not self._is_valid_number(distance) or distance <= 0:
             distance = self.price * 0.01
         return distance
@@ -124,7 +120,7 @@ class SovereignStrategy(Strategy):
     def _position_qty(self) -> float:
         distance = self._stop_distance()
         try:
-            risk_pct = self.regime_params["risk"]["max_position_sizing_pct"] / 100.0
+            risk_pct = self.regime_params['risk']['max_position_sizing_pct'] / 100.0
             qty = (self.capital * risk_pct) / distance
         except Exception:
             qty = None
@@ -152,13 +148,13 @@ class SovereignStrategy(Strategy):
         # placement would have raised on the very first fill. They are also
         # priced off the *filled* entry, so slippage cannot silently widen the
         # real stop distance beyond the one the size was computed from.
-        risk = self.regime_params["risk"]
-        sl_value = risk["stop_loss_value"]
-        tp_value = risk.get("take_profit_value", sl_value * 2)
+        risk = self.regime_params['risk']
+        sl_value = risk['stop_loss_value']
+        tp_value = risk.get('take_profit_value', sl_value * 2)
         reward_ratio = (tp_value / sl_value) if sl_value else 2.0
 
         entry = self.position.entry_price
-        distance = getattr(self, "_entry_stop_distance", None)
+        distance = getattr(self, '_entry_stop_distance', None)
         if not self._is_valid_number(distance) or distance <= 0:
             distance = entry * 0.01
         qty = abs(self.position.qty)
@@ -180,7 +176,7 @@ class SovereignStrategy(Strategy):
         elif self.is_short:
             self._trail_side(is_long=False)
         else:
-            self._trail_peak = None  # flat: reset state for the next position
+            self._trail_peak = None      # flat: reset state for the next position
             self._last_sent_sl = None
 
     def _trail_side(self, is_long: bool):
@@ -198,7 +194,7 @@ class SovereignStrategy(Strategy):
             self._trail_peak = self.price
 
     def _trailing_sl(self, is_long: bool) -> float:
-        sl_value = self.regime_params["risk"]["stop_loss_value"]
+        sl_value = self.regime_params['risk']['stop_loss_value']
         factor = (1 - sl_value) if is_long else (1 + sl_value)
         return self._trail_peak * factor
 
@@ -226,8 +222,8 @@ class SovereignStrategy(Strategy):
 
     def update_position(self):
         # Dynamic stop-loss management based on stop_loss_type
-        sl_type = self.regime_params["risk"].get("stop_loss_type", "fixed")
-        if sl_type == "trailing":
+        sl_type = self.regime_params['risk'].get('stop_loss_type', 'fixed')
+        if sl_type == 'trailing':
             self._update_trailing_stop()
-        elif sl_type == "atr":
+        elif sl_type == 'atr':
             self._update_atr_stop()

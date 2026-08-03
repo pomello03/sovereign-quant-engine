@@ -101,10 +101,20 @@ class MCPJesseRunner:
                     data_fingerprint = json.load(fh).get("sha256")
             except (OSError, json.JSONDecodeError):
                 data_fingerprint = None
+        # Relative to the project root. The absolute path names a home directory
+        # on one machine, which tells a later reader nothing and publishes a
+        # local layout into a report meant to be shared.
+        rel_candles = None
+        if data_source:
+            try:
+                rel_candles = os.path.relpath(self.candles_path, self.project_root)
+            except ValueError:  # different drive on Windows
+                rel_candles = os.path.basename(self.candles_path)
+
         return {
             "data_source": data_source,
             "data_fingerprint": data_fingerprint,
-            "candles_path": self.candles_path if data_source else None,
+            "candles_path": rel_candles,
             "exchange": self.exchange,
             "symbol": self.symbol,
             "timeframe": self.timeframe,
