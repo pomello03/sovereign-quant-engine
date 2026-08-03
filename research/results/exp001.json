@@ -1,0 +1,92 @@
+{
+  "experiment": "EXP-001",
+  "window": [
+    "2024-01-01",
+    "2026-07-01"
+  ],
+  "pass_percentile": 99.16666666666667,
+  "min_entries": 30,
+  "n_candidates": 6,
+  "results": {
+    "S1 donchian20 breakout": {
+      "n_trades": 148,
+      "net_return_pct": -17.809537386059116,
+      "max_drawdown_pct": 42.532616071298335,
+      "win_rate_pct": 35.13513513513514,
+      "percentile_vs_random": 46.73,
+      "baseline_p95": 48.89978167615743,
+      "baseline_pass_bar": 88.85266396878235,
+      "passes": false,
+      "is_reference": false
+    },
+    "S2 rsi(14) < 30": {
+      "n_trades": 118,
+      "net_return_pct": -30.36811211494338,
+      "max_drawdown_pct": 39.605932634604194,
+      "win_rate_pct": 32.20338983050847,
+      "percentile_vs_random": 20.9,
+      "baseline_p95": 42.06769471290723,
+      "baseline_pass_bar": 80.1873871701744,
+      "passes": false,
+      "is_reference": false
+    },
+    "S3 bollinger lower": {
+      "n_trades": 193,
+      "net_return_pct": -38.25867652712331,
+      "max_drawdown_pct": 48.431937778845004,
+      "win_rate_pct": 33.160621761658035,
+      "percentile_vs_random": 22.040000000000003,
+      "baseline_p95": 59.76886588757415,
+      "baseline_pass_bar": 115.04456483733549,
+      "passes": false,
+      "is_reference": false
+    },
+    "S4 ema20 x ema50 up": {
+      "n_trades": 50,
+      "net_return_pct": 8.14286706903613,
+      "max_drawdown_pct": 12.416858077561239,
+      "win_rate_pct": 40.0,
+      "percentile_vs_random": 75.29,
+      "baseline_p95": 29.2467615775998,
+      "baseline_pass_bar": 54.46904480193751,
+      "passes": false,
+      "is_reference": false
+    },
+    "S5 momentum 30 bars": {
+      "n_trades": 337,
+      "net_return_pct": -50.75585246304751,
+      "max_drawdown_pct": 68.80044333174223,
+      "win_rate_pct": 33.82789317507419,
+      "percentile_vs_random": 26.3,
+      "baseline_p95": 61.621783879403466,
+      "baseline_pass_bar": 144.9913445446943,
+      "passes": false,
+      "is_reference": false
+    },
+    "S6 pullback in uptrend": {
+      "n_trades": 63,
+      "net_return_pct": -14.010223365884523,
+      "max_drawdown_pct": 25.99975767763354,
+      "win_rate_pct": 33.33333333333333,
+      "percentile_vs_random": 34.31,
+      "baseline_p95": 30.345987335526537,
+      "baseline_pass_bar": 65.32050395811257,
+      "passes": false,
+      "is_reference": false
+    },
+    "C0 sma(50) cross up [reference]": {
+      "n_trades": 120,
+      "net_return_pct": -4.8594065588967394,
+      "max_drawdown_pct": 27.055931623153857,
+      "win_rate_pct": 36.666666666666664,
+      "percentile_vs_random": 57.809999999999995,
+      "baseline_p95": 44.21708106691946,
+      "baseline_pass_bar": 82.91349821133197,
+      "passes": false,
+      "is_reference": true
+    }
+  },
+  "n_passed": 0,
+  "passed": [],
+  "run_at_utc": "2026-08-03T20:27:01.081465+00:00"
+}

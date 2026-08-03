@@ -26,9 +26,10 @@
     "risk": {
       "type": "object",
       "properties": {
-        "max_drawdown_limit_pct": {"type": "number", "maximum": 2.0},
+        "max_drawdown_limit_pct": {"type": "number", "exclusiveMinimum": 0, "maximum": 30.0},
+        "max_risk_per_trade_pct": {"type": "number", "exclusiveMinimum": 0, "maximum": 5.0},
         "stop_loss_type": {"type": "string", "enum": ["fixed", "trailing", "atr"]},
-        "stop_loss_value": {"type": "number"},
+        "stop_loss_value": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.5},
         "take_profit_value": {"type": "number"},
         "risk_to_reward_minimum": {"type": "number", "minimum": 1.5},
         "max_position_sizing_pct": {"type": "number", "maximum": 5.0}

@@ -1,131 +1,151 @@
 # Sovereign Quant Engine (SQE)
 
-Il **Sovereign Quant Engine (SQE)** è un'infrastruttura automatizzata a ciclo chiuso (Closed-Loop) progettata per tradurre specifiche logiche ad alto livello in strategie di trading algoritmico sicure, ottimizzate e validate quantitativamente. Il sistema si interfaccia direttamente con il framework di trading algoritmico [Jesse](https://jesse.trade/).
+Una pipeline che genera strategie di trading algoritmico da specifiche JSON, le esegue su dati di
+mercato reali, e ne riporta il risultato con la provenienza allegata.
 
-Lo scopo principale del progetto è automatizzare l'intero ciclo di vita di una strategia quantitativa: dalla validazione iniziale delle regole, passando per la generazione sicura del codice Python e l'esecuzione dei backtest, fino alla validazione statistica tramite simulazioni Monte Carlo e alla calibrazione automatica del rischio per prevenire la rovina del capitale (*Risk of Ruin*).
+**Stato: ricerca conclusa, nessuna strategia promossa.** Il motore misura onestamente. Le sei
+strategie candidate testate non hanno superato la soglia statistica, e il progetto si è fermato
+prima di scrivere qualunque layer di esecuzione. Non c'è codice che possa inviare un ordine, e non
+ce ne sarà finché non esisterà qualcosa da eseguire.
 
 ---
 
-## 📐 Architettura del Sistema
+## Cosa ha misurato
 
-Il motore opera come un ciclo chiuso strutturato in 5 componenti principali:
+Su **11.115 candele a 4h** e **1.402.560 candele a 1 minuto** di Bybit spot BTCUSDT, scaricate
+dall'endpoint pubblico con hash e report di completezza
+([`research/`](research/README.md)):
+
+**La strategia specificata in `alpha_spec.json` non apre nessuna posizione.** Zero, in cinque anni.
+`rsi(14) < 30` e `close > sma(50)` hanno correlazione **+0.870** — misurano la stessa cosa, quindi
+richiederle insieme è richiedere che il prezzo scenda e salga contemporaneamente. L'RSI più basso
+mai osservato mentre il prezzo sta sopra la sua media è **36.59**; la soglia è 30.
+
+**Le commissioni hanno la stessa taglia dell'edge disponibile.**
+
+| | win rate |
+|---|---|
+| ingressi casuali | 35.42 % |
+| pareggio dopo commissioni | **36.66 %** |
+| incrocio di medie mobili classico | **36.67 %** |
+
+**Il limite di drawdown del 2 % non era raggiungibile.** BTC sta più del 2 % sotto il proprio
+massimo il **91.6 %** del tempo, e zero percorsi casuali su mille sono rimasti sotto quella soglia.
+L'esposizione necessaria per rispettarla produce ordini sotto il minimo di 5 USDT dell'exchange.
+
+**EXP-001**, unico test pre-registrato: sei segnali standard, regole committate prima
+dell'esecuzione, soglia al 99.17° percentile (Bonferroni). **Zero superati.**
+
+Dettaglio: [`research/RESULT_P0-1.md`](research/RESULT_P0-1.md) ·
+[`research/RESULT_DOMAIN.md`](research/RESULT_DOMAIN.md) ·
+[`research/EXPERIMENT_REGISTER.md`](research/EXPERIMENT_REGISTER.md)
+
+---
+
+## Come è fatto
 
 ```mermaid
 graph TD
-    A[Supervisor Node] -->|Validazione Schema & Blueprint| B[Developer Bridge Node]
-    B -->|Generazione Strategia Python & params.py| C[Jesse Workspace Backtester]
-    C -->|Rapporto Metriche di Performance| B
-    B -->|Ciclo Chiuso di Feedback / Regolazione| D[Quant Validator Node]
-    D -->|Simulazione Monte Carlo Bootstrap o Log-Normale| E[Report Finale & Dashboard Web]
-    E -->|Se fallito: Tuning dei Parametri| F[Risk Parameter Optimizer]
-    F -->|Parametri Corretti| B
+    A[Supervisor] -->|blueprint validato| B[Developer Bridge]
+    B -->|codice Python generato| C[MCP Executor]
+    C -->|jesse.research.backtest su candele 1m reali| D[Quant Validator]
+    C -.->|niente Jesse o niente candele| N[NO_DATA]
+    D -->|PASSED / FAILED / NO_TRADES| E[Report + dashboard]
 ```
 
-### 1. Nodo di Supervisione ([supervisor.py](file:///C:/Users/franc/Documents/sovereign-quant-engine/core_engine/supervisor.py))
-* **Scopo:** Agisce come gatekeeper all'inizio della pipeline. Si assicura che qualsiasi richiesta (payload) o configurazione in ingresso sia strutturalmente valida e non violi i limiti fondamentali di rischio.
-* **Dettagli:** Valida i file di configurazione (`strategy_blueprint.json` e `risk_constraints.json`) rispetto a schemi JSON formali rigorosi. Blocca immediatamente l'esecuzione se rileva parametri di rischio assurdi o formati errati.
+**Supervisor** ([`supervisor.py`](core_engine/supervisor.py)) — valida gli input contro schemi JSON
+e applica i limiti di rischio. Stop e take-profit devono essere positivi: `(-0.04)/(-0.02)` fa 2.0,
+e due negativi passavano il controllo di rischio/rendimento.
 
-### 2. Ponte di Sviluppo ([developer_bridge.py](file:///C:/Users/franc/Documents/sovereign-quant-engine/core_engine/developer_bridge.py))
-* **Scopo:** Genera il codice Python conforme a Jesse a partire dalle specifiche del blueprint.
-* **AST Security Parser:** Per escludere attacchi di *code injection*, implementa un parser AST (Abstract Syntax Tree) che analizza formalmente le formule matematiche e le condizioni tecniche di ingresso/uscita (es. `close > EMA(50)`). Rifiuta qualsiasi istruzione non inclusa in una whitelist ristretta (esclude chiamate a funzioni esterne, importazioni di librerie arbitrarie o accessi a proprietà di sistema).
-* **Regime Switching:** Mappa automaticamente parametri diversi a seconda del regime di mercato attivo (es. *trending_bullish*, *ranging_bearish*) e inietta il codice a runtime per commutare dinamicamente i parametri di risk management durante il backtest.
+**Developer Bridge** ([`developer_bridge.py`](core_engine/developer_bridge.py)) — genera la
+strategia Jesse. Ogni condizione d'ingresso passa da un parser AST che accetta solo aritmetica,
+confronti e nomi dichiarati; chiamate di funzione e accessi ad attributi sollevano. I parametri
+degli indicatori devono essere **numeri**, e vengono emessi come `repr()` di un valore validato,
+mai come il testo del chiamante. Il file viene analizzato con `ast.parse` **prima** di toccare il
+disco.
 
-### 3. Validatore Quantitativo ([quant_validator.py](file:///C:/Users/franc/Documents/sovereign-quant-engine/core_engine/quant_validator.py))
-* **Scopo:** Valuta l'affidabilità statistica della strategia superando i limiti del backtest classico.
-* **Simulatore Monte Carlo Avanzato:** Esegue stress test per calcolare la probabilità di rovina (*Risk of Ruin*) e il Drawdown Massimo atteso tramite:
-  - **Bootstrap Non-Parametrico (Empirico):** Se sono presenti i dati reali dei singoli trade eseguiti dal backtest, esegue un campionamento casuale con reinserimento per ricostruire migliaia di curve di equity, preservando la reale distribuzione di probabilità originaria (inclusi eventi fat-tail e asimmetrie).
-  - **Mixture Log-Normale Parametrica:** Se mancano i log di trade storici dettagliati, genera campioni casuali sintetici basandosi sui macro-indicatori (Sharpe Ratio, Win Rate, Profit Factor, numero totale di operazioni) modellando distribuzioni asimmetriche realistiche.
-* **Output:** Genera `validation_report.json` e aggiorna la dashboard visuale.
+**MCP Executor** ([`mcp_executor.py`](core_engine/mcp_executor.py)) — esegue il backtest in-process
+con `jesse.research.backtest()` su candele a 1 minuto reali. **Non esiste un percorso mock.**
+`SUCCESS` richiede candele; tutto il resto è `NO_DATA` con `metrics = None`. Ogni risultato porta
+la provenienza: origine del dato, sha256, exchange, commissioni, hash della strategia, finestra.
 
-### 4. Ottimizzatore Parametri di Rischio ([optimizer.py](file:///C:/Users/franc/Documents/sovereign-quant-engine/core_engine/optimizer.py))
-* **Scopo:** Se le metriche finali o la simulazione Monte Carlo indicano che la strategia supera le soglie di rischio (es. probabilità di rovina > 5% o drawdown > 15%), questo modulo interviene in modo iterativo.
-* **Dettagli:** Scala dinamicamente la dimensione delle posizioni (`max_position_sizing_pct`), incrementa la severità dello stop loss (`stop_loss_value`) ed esegue nuovamente i cicli di backtest e validazione fino a trovare una configurazione compliant e sicura per il trading.
+**Quant Validator** ([`quant_validator.py`](core_engine/quant_validator.py)) — gate sulle metriche
+e Monte Carlo bootstrap. Una metrica mai misurata **solleva** invece di saltare il controllo. Un
+verdetto positivo richiede provenienza tracciata. Zero trade è riportato come `NO_TRADES`, non
+ricampionato in un rischio di rovina dello 0 %.
 
-### 5. Monitor & Dashboard Web ([web_dashboard/](file:///C:/Users/franc/Documents/sovereign-quant-engine/web_dashboard/))
-* **Scopo:** Un'applicazione web responsive basata su FastAPI e HTML5/Vanilla CSS che fornisce una visualizzazione in tempo reale di tutto il processo.
-* **Dettagli:** Mostra un indicatore di progresso (stepper) del processo, metriche chiave di performance, un visualizzatore di log in tempo reale e un grafico interattivo (Chart.js) che illustra la traiettoria di calibrazione dell'ottimizzatore. Include tooltip informativi completi in lingua italiana.
+**Risk Optimizer** ([`optimizer.py`](core_engine/optimizer.py)) — **sospeso**, nessuno lo invoca.
+Cercava il parametro sulla stessa finestra su cui poi riportava il verdetto.
+
+Perché la granularità a 1 minuto conta: con uno stop al 2 % e un target al 4 %, una barra a 4h che
+attraversa entrambi non dice quale sia arrivato prima, e assumere quello favorevole è il modo in cui
+una strategia perdente risulta vincente nel backtest.
 
 ---
 
-## 📂 Struttura delle Directory
+## Esecuzione
 
-```bash
-├── core_engine/                 # Implementazioni core del motore
-│   ├── supervisor.py            # Validazione configurazioni e vincoli iniziali
-│   ├── developer_bridge.py      # Generatore di codice Jesse & Parser AST
-│   ├── quant_validator.py       # Motore di simulazione Monte Carlo e reportistica
-│   ├── optimizer.py             # Calibrazione iterativa dei limiti di rischio
-│   └── mcp_executor.py          # Orchestratore e gestore esecuzione di Jesse
-├── payload_drop/                # File temporanei, blueprint, report e grafici
-│   ├── strategy_blueprint.json  # Blueprint logico della strategia generata
-│   ├── risk_constraints.json    # Soglie di rischio e vincoli massimi tollerati
-│   ├── validation_report.json   # JSON con i risultati delle simulazioni Monte Carlo
-│   └── validation_dashboard.html# Dashboard visuale locale esportata
-├── jesse_workspace/             # Workspace di esecuzione per Jesse
-│   ├── strategies/              # Contiene il codice Python autogenerato
-│   ├── config.py                # Configurazione del database e dell'ambiente Jesse
-│   └── routes.py                # Rotte e coppie di trading configurate
-├── docs/                        # Guide operative e documentazione dettagliata
-│   ├── git_workflow.md          # Regole del modello di sviluppo GitFlow
-│   └── Guida Master Completa.md # Manuale tecnico dell'infrastruttura
-├── tests/                       # Suite di test unitari (61 test passati)
-├── run_simulation.py            # Script principale per eseguire la simulazione end-to-end
-├── run_dashboard.bat            # Script batch per lanciare la dashboard web locale
-├── push_to_github.bat           # Script helper per sincronizzare il lavoro su GitHub
-├── requirements.txt             # Librerie e dipendenze Python richieste
-└── .antigravity_rules.md        # Regole operative per l'agente IA
-```
-
----
-
-## 🚀 Guida all'Installazione e Setup
-
-### 1. Clonazione del Progetto
-Scarica il codice sorgente e posizionati nella cartella principale del progetto:
 ```bash
 git clone https://github.com/pomello03/sovereign-quant-engine.git
 cd sovereign-quant-engine
-```
-
-### 2. Installazione delle Dipendenze
-Installa le librerie Python necessarie (incluso Jesse, jsonschema, pydantic e i motori di test/audit):
-```bash
 pip install -r requirements.txt
+python -m pytest -p no:anyio -q          # 115 test
 ```
 
-### 3. Esecuzione dei Test Unitari
-Accertati che l'intera infrastruttura (inclusi i meccanismi di sicurezza dell'AST e le formule di calcolo Monte Carlo) sia stabile eseguendo la suite di test:
-```bash
-python -m pytest -v
-```
+Il flag `-p no:anyio` è obbligatorio: Jesse fissa `pytest~=6.2.5`, che confligge con il plugin anyio.
 
-### 4. Esecuzione della Simulazione Completa
-Per far girare l'intera pipeline di generazione, backtest, validazione quantitativa Monte Carlo ed eventuale ottimizzazione in modalità CLI:
 ```bash
 python run_simulation.py
 ```
-I risultati verranno salvati in `payload_drop/validation_report.json` e visualizzati graficamente in `payload_drop/validation_dashboard.html`.
 
-### 5. Avvio del Dashboard Web in Tempo Reale
-Per avviare l'interfaccia interattiva, esegui lo script batch dedicato (su Windows):
-- Fai doppio clic su `run_dashboard.bat` (oppure avvialo da terminale).
-- Verrà aperto automaticamente il tuo browser predefinito all'indirizzo `http://127.0.0.1:8000`.
+Restituisce `NO_DATA` — corretto: Jesse non è nell'ambiente principale, quindi non c'è misura.
+Gli exit code distinguono i casi: `0` superato, `1` non superato, `2` nessuna misura, `3` errore.
 
----
-
-## 🌳 Gestione delle Versioni (GitFlow)
-
-Il progetto adotta rigorosamente il modello **GitFlow** per garantire la stabilità di produzione:
-* **`main`:** Contiene solo versioni stabili rilasciate e taggate (es. `v1.0.0`).
-* **`develop`:** È il ramo di integrazione principale per il lavoro corrente.
-* **`feature/*`:** Branch temporanei creati a partire da `develop` per l'aggiunta di indicatori o nuove logiche.
-
-Per maggiori dettagli su come collaborare con l'agente o gestire le release, consulta la [Guida al Git Workflow](file:///C:/Users/franc/Documents/sovereign-quant-engine/docs/git_workflow.md).
+Per un backtest reale servono Jesse in un interprete separato e le candele, entrambi descritti in
+[`research/README.md`](research/README.md). Jesse resta fuori dal venv principale perché fissa
+`pytest~=6.2.5` e perché importa ed esegue il codice generato.
 
 ---
 
-## 🛡️ Dispositivi di Sicurezza Chiave
+## Struttura
 
-* **Nessun `eval` insicuro:** Tutte le condizioni tecniche sono sanificate tramite il parser AST del `developer_bridge.py`. Qualsiasi chiamata abusiva (es. `os.system`) solleva un errore di sicurezza.
-* **Prevenzione del Rischio di Rovina:** Se la probabilità di azzerare l'account calcolata dal simulatore Monte Carlo supera il limite massimo configurato (di default `5.0%`), la strategia non viene approvata e viene forzata l'ottimizzazione dei parametri.
-* **Credenziali Sicure:** Il token di accesso remoto GitHub (PAT) è configurato esclusivamente a livello locale in `.git/config` ed è protetto nel file `.gitignore` per impedirne il leak accidentale.
+```
+core_engine/      supervisor · developer_bridge · mcp_executor · quant_validator · optimizer · state_io
+research/         misurazione, deliberatamente senza dipendenze da core_engine
+  strategies/     SpecStrategy (l'alpha_spec, scritta a mano) e ControlStrategy (il controllo)
+  results/        ogni risultato con hash del dato, finestra, commissioni, rendimenti per trade
+payload_drop/     confine di I/O: specifiche in ingresso, blueprint e report in uscita
+schemas/          schemi JSON — vincolanti, perché ogni valore diventa codice Python
+tests/            115 test
+docs/             audit, protocollo di validazione e gate, threat model e runbook
+plans/            roadmap verso un eventuale live controllato
+```
+
+---
+
+## Sicurezza
+
+**Tutto ciò che arriva da `alpha_spec.json` diventa sorgente Python.** Qui è vissuta una RCE
+confermata: un valore in `indicators[].params` veniva interpolato in una f-string, quindi
+`{"period": "14, __x=open(...).write(...)"}` produceva Python valido che girava al primo accesso
+all'indicatore — in silenzio, perché il getter è avvolto in `try/except`. Tre livelli indipendenti
+ora la fermano, con 16 test di regressione in
+[`tests/test_rce_regression.py`](tests/test_rce_regression.py).
+
+Nessun LLM è mai nel percorso critico di un ordine. Il threat model e il runbook operativo stanno
+in [`docs/THREAT_MODEL_AND_RUNBOOK.md`](docs/THREAT_MODEL_AND_RUNBOOK.md).
+
+---
+
+## Cosa riaprirebbe la ricerca
+
+Non un'altra passata di segnali tecnici: quella è stata fatta, una volta, con le regole fissate in
+anticipo, e ha risposto.
+
+Serve un'**ipotesi di mercato con un meccanismo** — una ragione per cui qualcuno dovrebbe essere
+disposto a stare dall'altra parte del trade — dichiarata prima di guardare i dati e registrata in
+[`research/EXPERIMENT_REGISTER.md`](research/EXPERIMENT_REGISTER.md). L'infrastruttura per
+valutarla onestamente esiste; l'ipotesi no.
+
+I criteri di abbandono, i gate di promozione e il protocollo statistico completo sono in
+[`docs/VALIDATION_AND_LIVE_GATES.md`](docs/VALIDATION_AND_LIVE_GATES.md).

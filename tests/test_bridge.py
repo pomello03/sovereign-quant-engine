@@ -330,5 +330,9 @@ def test_regime_switching_init(temp_dirs, dummy_blueprint):
     
     assert "def current_regime(self)" in init_content
     assert "'trending_bullish'" in init_content
-    assert "def hyperparameters(self)" in init_content
+    # Named regime_params, not hyperparameters: Jesse's Strategy base class
+    # defines hyperparameters() as a method and calls it during route setup, so
+    # a dict-returning property of that name breaks every run at startup.
+    assert "def regime_params(self)" in init_content
+    assert "def hyperparameters(self)" not in init_content
     assert "'default' in params" in init_content

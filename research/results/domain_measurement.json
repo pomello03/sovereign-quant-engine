@@ -1,0 +1,67 @@
+{
+  "window": [
+    "2024-01-01",
+    "2026-07-01"
+  ],
+  "fee_per_side": 0.001,
+  "round_trip_cost": 0.001998999999999973,
+  "buy_and_hold": {
+    "dd_full_history_pct": 77.01505319770841,
+    "dd_window_pct": 53.44397804223775,
+    "buy_hold_return_pct": 38.47890730361625,
+    "pct_time_beyond_2pct": 91.61184210526315
+  },
+  "fee_floor": {
+    "1": {
+      "median_abs_move": 0.004484644848547159,
+      "p_beats_fees": 0.7472125753975507
+    },
+    "3": {
+      "median_abs_move": 0.008434290388007915,
+      "p_beats_fees": 0.8493326019381972
+    },
+    "6": {
+      "median_abs_move": 0.01257799274604987,
+      "p_beats_fees": 0.9035858031467252
+    },
+    "12": {
+      "median_abs_move": 0.019512891417345912,
+      "p_beats_fees": 0.9307692307692308
+    },
+    "30": {
+      "median_abs_move": 0.032248973896966904,
+      "p_beats_fees": 0.9571848585079015
+    },
+    "60": {
+      "median_abs_move": 0.046447509792872044,
+      "p_beats_fees": 0.9728381374722838
+    }
+  },
+  "random_baseline": {
+    "n_trades": 120,
+    "reps": 1000,
+    "win_rate": 0.3541666666666667,
+    "mean_net_return_per_trade": -0.0007514987499999344,
+    "final_return_pct": {
+      "p5": -47.48380890647551,
+      "median": -15.520501164168188,
+      "p95": 44.21708106691942
+    },
+    "max_drawdown_pct": {
+      "p5": 17.469731650009646,
+      "median": 33.45657306953581,
+      "p95": 53.09383244523268
+    },
+    "p_profitable": 0.316,
+    "p_drawdown_under_2pct": 0.0
+  },
+  "control_vs_baseline": {
+    "control_return_pct": -4.7824,
+    "percentile_vs_random": 64.83,
+    "random_p95_pct": 44.21708106691944,
+    "beats_baseline": false,
+    "break_even_win_rate": 0.3666499999999996,
+    "random_win_rate": 0.3541666666666667,
+    "control_win_rate": 0.3667
+  }
+}

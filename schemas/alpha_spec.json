@@ -1,22 +1,54 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "AlphaSpecification",
+  "description": "Every value here is interpolated into generated Python source. The constraints below exist because a permissive 'type': 'string' on indicator params was a confirmed remote code execution vector: a params value became arbitrary code inside a ta.<name>(...) call. Indicator parameters are numbers; nothing here needs to be free text.",
   "type": "object",
   "properties": {
-    "strategy_name": {"type": "string"},
+    "strategy_name": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+      "maxLength": 64
+    },
     "indicators": {
       "type": "array",
+      "maxItems": 16,
       "items": {
         "type": "object",
         "properties": {
-          "name": {"type": "string"},
-          "params": {"type": "object"}
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "maxLength": 32,
+            "description": "Becomes a ta.<name> attribute and a Python property name."
+          },
+          "params": {
+            "type": "object",
+            "description": "Keys become Python keyword arguments; values become literals.",
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "maxLength": 32
+            },
+            "additionalProperties": {
+              "type": "number"
+            },
+            "maxProperties": 8
+          }
         },
-        "required": ["name", "params"]
+        "required": ["name", "params"],
+        "additionalProperties": false
       }
     },
-    "entry_long_conditions": {"type": "array", "items": {"type": "string"}},
-    "entry_short_conditions": {"type": "array", "items": {"type": "string"}}
+    "entry_long_conditions": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {"type": "string", "maxLength": 256}
+    },
+    "entry_short_conditions": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {"type": "string", "maxLength": 256}
+    }
   },
-  "required": ["strategy_name", "indicators", "entry_long_conditions", "entry_short_conditions"]
+  "required": ["strategy_name", "indicators", "entry_long_conditions", "entry_short_conditions"],
+  "additionalProperties": false
 }

@@ -1,0 +1,33 @@
+{
+  "source": "bybit",
+  "endpoint": "https://api.bybit.com/v5/market/kline",
+  "category": "spot",
+  "symbol": "BTCUSDT",
+  "interval_code": "1",
+  "interval_ms": 60000,
+  "column_order": [
+    "timestamp",
+    "open",
+    "close",
+    "high",
+    "low",
+    "volume"
+  ],
+  "requested_start": "2023-12-01",
+  "requested_end": "2026-08-01",
+  "first_candle": "2023-12-01T00:00:00+00:00",
+  "last_candle": "2026-07-31T23:59:00+00:00",
+  "n_candles": 1402560,
+  "n_candles_expected": 1402560,
+  "completeness_pct": 100.0,
+  "integrity": {
+    "gap_count": 0,
+    "missing_candles_total": 0,
+    "largest_gaps": [],
+    "non_monotonic_timestamps": 0,
+    "invalid_ohlc_rows": 0
+  },
+  "sha256": "252993559a78e464e3eda7241aacea5b35efe35f2b018a9b33ee1a0108d30c8f",
+  "format": "npy",
+  "fetched_at_utc": "2026-08-03T19:48:33.592093+00:00"
+}

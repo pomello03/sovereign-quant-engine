@@ -29,25 +29,37 @@ alpha_spec + risk_constraints + context_regime (payload_drop/*.json)
    ▼
    │  DeveloperBridge.execute_closed_loop()      [developer_bridge.py]
    │   ├─ generate_strategy_code(): blueprint → SovereignStrategy/__init__.py + params.py
-   │   │   (AST-validates every entry condition; ruff-formats the output)
+   │   │   (AST-validates every entry condition; identifier/number guards on every
+   │   │    value that becomes source; ast.parse before anything reaches disk)
    │   └─ runner.run_backtest()                  [mcp_executor.py]
-   │       ├─ runs bin/sqe-audit.sh static gate FIRST (ruff + vulture + xenon).
-   │       │   Audit failure → COMPILATION_ERROR → bridge regenerates & retries (≤3x)
-   │       └─ runs `jesse backtest` IF Jesse CLI is on PATH, ELSE returns MOCK metrics
+   │       ├─ compiles the generated strategy → COMPILATION_ERROR on failure
+   │       └─ jesse.research.backtest() in-process, on real 1m candles.
+   │          No Jesse, or no candles, or a window they do not cover → NO_DATA
+   │          with metrics=None. There is no mock path.
    ▼
    │  QuantValidator.generate_report()           [quant_validator.py]
-   │   Monte Carlo stress test → validation_report.json + validation_dashboard.html
-   ▼
-   IF validation fails → RiskOptimizer.optimize_risk_parameters()  [optimizer.py]
-       loops: shrink position size, then stop-loss → regenerate → re-backtest →
-       re-validate, up to max_iterations, until risk_of_ruin ≤ 5% and DD within limit.
+   │   Monte Carlo (skipped when total_trades == 0) → validation_report.json
+   │   Verdict is PASSED / FAILED / NO_TRADES, and PASSED additionally requires
+   │   provenance.data_source == 'jesse'.
 ```
 
 **Two entry points drive this exact flow:**
-- `run_simulation.py` — CLI; runs once, then triggers `RiskOptimizer` only if validation fails.
-- `web_dashboard/main.py` — FastAPI server; streams each step to the browser over **Server-Sent Events** (`GET /api/run`), with the optimizer loop inlined into the stream rather than calling `RiskOptimizer`.
+- `run_simulation.py` — CLI. Exit codes: `0` passed, `1` failed, `2` nothing measured, `3` error.
+- `web_dashboard/main.py` — FastAPI server; streams each step over **Server-Sent Events** (`GET /api/run`).
 
-> **⚠️ Current execution reality:** Jesse is **not installed** in this environment, so `run_backtest()` falls through to its **mock path** ([mcp_executor.py](core_engine/mcp_executor.py) `mock_metrics`). Drawdown/Sharpe are then **deterministic functions of the blueprint's risk params** (e.g. `simulated_drawdown = -(pos_sizing * sl * 100 * 3)`), not measured market outcomes. Every "PASSED" verdict and dashboard chart you see today is built on synthetic numbers. Installing Jesse + loading real candle data is what turns this from a self-simulating demo into a real backtester — treat that as the prerequisite for any claim about strategy performance.
+> **⚠️ Execution reality, 2026-08-03.** Real market data now exists (`research/data/`, Bybit spot,
+> sha256 recorded). Jesse lives in **`.venv-jesse`, not the project venv** — running the pipeline
+> with the project interpreter yields `NO_DATA`, which is correct: no framework, no measurement.
+>
+> The strategy in `payload_drop/alpha_spec.json` **opens zero positions** on five years of real
+> candles: `rsi < 30` and `close > sma` are anti-correlated (r = +0.870) and never co-occur. The
+> pipeline previously certified it `PASSED` with `risk_of_ruin: 0.0`. Read
+> [research/RESULT_P0-1.md](research/RESULT_P0-1.md) before making any claim about strategy
+> performance, and treat that zero-trade spec as a live regression test: if the pipeline ever
+> reports PASSED on it again, the pipeline is broken.
+>
+> Costs are not optional here. The control strategy's 120 real trades produced **+2081 gross,
+> −2560 in fees, −478 net** — the venue keeps 123% of the gross edge.
 
 ---
 
@@ -103,19 +115,34 @@ python web_dashboard\main.py
 # (or) uvicorn web_dashboard.main:app --reload
 ```
 
-### Static Audit Gate
-The Developer Bridge runs `bin/sqe-audit.sh` against generated strategies **before every backtest**.
-It chains three tools and fails the build (→ `COMPILATION_ERROR`) if any returns non-zero:
-```powershell
-# These must be installed for non-mock audit runs (they are NOT in requirements.txt):
-pip install ruff vulture xenon
+### Real backtests and market data
 
-# What the gate runs (mirrors bin/sqe-audit.sh):
-ruff check jesse_workspace/strategies/ --select F,E,W,I,U
-vulture jesse_workspace/strategies/ --min-confidence 80
-xenon --max-absolute A --max-modules A --max-average B jesse_workspace/strategies/
+Jesse is installed in a **separate interpreter**, so the project venv stays free of its
+`pytest~=6.2.5` pin and of a framework that imports and executes generated code.
+
+```powershell
+python -m venv .venv-jesse
+.\.venv-jesse\Scripts\python.exe -m pip install jesse jsonschema
+
+# Candles from Bybit's public endpoint (no credentials). ~10 min for the 1m series.
+.\.venv-jesse\Scripts\python.exe research\fetch_bybit_candles.py --interval 1 `
+    --start 2023-12-01 --end 2026-08-01 --format npy --pause 0.08
+
+# The pipeline, for real
+.\.venv-jesse\Scripts\python.exe run_simulation.py --start 2024-01-01 --end 2026-07-01
 ```
-On Windows the bridge locates a POSIX `sh.exe` (Git for Windows) to run the script; if none is found it falls back to invoking the three tools directly via `python -m`. The audit is **skipped under pytest** (`PYTEST_CURRENT_TEST` env var).
+
+Data files are gitignored; the `.meta.json` beside each **is tracked**, because the sha256 and
+window are what make a result checkable later. See [research/README.md](research/README.md).
+
+Jesse requires **1-minute** candles and aggregates upward itself. That is not overhead: with a 2%
+stop and a 4% target, a 4h bar spanning both tells you nothing about which was hit first, and
+assuming the favourable one is how a losing strategy backtests as a winner.
+
+The old `bin/sqe-audit.sh` gate (ruff + vulture + xenon via a hunted-for `sh.exe`) is gone. It
+mapped any non-zero exit to `COMPILATION_ERROR`, so an uninstalled linter was indistinguishable
+from broken generated code and sent the bridge into three rounds of regenerating correct code.
+`ast.parse` + `compile` answers the only question it actually had.
 
 ### View Results
 ```powershell
@@ -144,9 +171,15 @@ Start-Process .\payload_drop\validation_dashboard.html
 - **Generated-strategy hardening** (referenced in comments as "Vuln 2/4"): indicator getters go through `_safe_indicator()` (cold-start NaN/None guards with safe fallbacks), ATR-based position sizing, and a unidirectional + throttled trailing stop (`TRAIL_MIN_MOVE_PCT`) to avoid exchange order-spam / HTTP 429.
 - **Output:** `jesse_workspace/strategies/SovereignStrategy/__init__.py` and `params.py` (ruff-formatted unless under pytest).
 
-#### `optimizer.py`
-- **Purpose:** Closed-loop risk-parameter search invoked when validation fails.
-- **Key Class:** `RiskOptimizer.optimize_risk_parameters()` — heuristically **halves `max_position_sizing_pct` first, then scales down `stop_loss_value`**, regenerating code and re-backtesting each iteration until `validate_with_monte_carlo` passes (risk_of_ruin ≤ 5%, avg DD within limit) or `max_iterations` is hit. Records every attempt in `optimization_history` (fed to the dashboard stepper). The web dashboard reimplements this same loop inline as an SSE stream.
+#### `optimizer.py` — **SUSPENDED, do not wire back in**
+Nothing calls it: `run_simulation.py` no longer does, and the copy of its loop inside the SSE
+endpoint is deleted. `optimize_risk_parameters()` emits a `RuntimeWarning` if invoked.
+
+It shrinks position size until the verdict flips, then reports that verdict — selecting a
+parameter on the evaluation set. Against the old mock metrics it was worse than that: drawdown
+was literally `-(pos_size * sl * 100 * 3)`, so the loop inverted an equation it had written
+itself, and the committed `optimization_history` reproduces exactly. Its premise — that halving
+sizing halves drawdown — has never been measured on real candles. See roadmap P0-7 / P1-1.
 
 #### `quant_validator.py`
 - **Purpose:** Validates backtest metrics against risk constraints and runs stress tests.
@@ -157,8 +190,19 @@ Start-Process .\payload_drop\validation_dashboard.html
 - **Output:** `payload_drop/validation_report.json` and the two-file dashboard (see below).
 
 #### `mcp_executor.py`
-- **Purpose:** Runs the Jesse backtest subprocess and parses its stdout into metrics; falls back to **mock metrics when Jesse CLI is absent or data is missing**.
-- **Key Class:** `MCPJesseRunner` — `run_backtest()` first runs the static audit gate, then shells out to `jesse backtest`. `_parse_jesse_output()` extracts Sharpe / max drawdown / total trades / profit factor / win rate from the report table. See the ⚠️ note in **Big Picture** — mock metrics are synthetic and parameter-derived.
+- **Purpose:** Measure, or say it could not. **There is no mock path, and adding one back is the
+  single most damaging change anyone could make to this repo.**
+- **Key Class:** `MCPJesseRunner.run_backtest()` — compiles the generated strategy, then runs
+  `jesse.research.backtest()` in-process on real 1m candles. `SUCCESS` requires candles;
+  everything else returns `NO_DATA` with `metrics=None` (None, not `{}`, so a caller that reads
+  a missing metric crashes instead of treating it as acceptable).
+- **Provenance on every result:** `data_source`, `data_fingerprint`, exchange/symbol/timeframe,
+  fee, `strategy_sha256`, window. `QuantValidator` refuses a positive verdict without it.
+- **Why in-process:** the previous version scraped `jesse backtest` stdout with regexes that never
+  extracted per-trade returns. Without them `run_monte_carlo` falls to parametric mode, which
+  `validate_with_monte_carlo` rejects — so a real backtest could never pass and only the mock
+  could. `research.backtest()` returns `trades` directly, which removes the whole class of bug.
+- Four tests guard the invariant structurally, including `test_no_mock_metrics_anywhere_in_the_module`.
 
 #### `state_io.py` & `db_pool.py` (shared-state / persistence hardening)
 - `state_io.py` — `atomic_write_json()` (write-temp-then-`os.replace`, so readers never see a partial file), `read_json_fresh()` (rejects stale signal files past a max age → `StaleStateError`, guarding against a silently-failed upstream agent), and a cross-platform `file_lock()` (fcntl on POSIX, msvcrt on Windows). The Supervisor and Validator write all state through these.
@@ -184,12 +228,14 @@ Start-Process .\payload_drop\validation_dashboard.html
 - `routes.py` — Configured with environment variables (exchange, symbol, timeframe).
 
 ### Testing (`tests/`)
-- **Unit test suite (~91 tests across 8 files):**
+- **Unit test suite (115 tests across 9 files):**
   - `test_supervisor.py` — schema loading, Ruin Bias enforcement, R:R cross-check, blueprint generation.
   - `test_bridge.py` — code generation, AST parsing/rejection, regime switching.
-  - `test_validator.py` — Monte Carlo modes, the bootstrap-required PASS gate, report generation.
-  - `test_executor.py` — backtest runner, mock fallback, metric parsing.
-  - `test_optimizer.py` — closed-loop parameter convergence.
+  - `test_rce_regression.py` — the audit's actual RCE payload, refused at each of three layers.
+  - `test_validator.py` — Monte Carlo modes, the bootstrap-required PASS gate, the provenance gate.
+  - `test_executor.py` — NO_DATA paths, provenance, and structural guards that SUCCESS cannot be
+    reached without data. **Do not relax these to make a test pass.**
+  - `test_optimizer.py` — closed-loop parameter convergence (module suspended; warns when run).
   - `test_state_io.py` — atomic writes, freshness/`StaleStateError`, file locking.
   - `test_db_pool.py` — pool sizing, transactional commit/rollback, deadlock retry (uses a fake connection factory).
   - `test_edge_cases.py` — cross-cutting boundary/error-path coverage.
@@ -199,18 +245,50 @@ Start-Process .\payload_drop\validation_dashboard.html
 
 ## Security Model
 
-### AST-Based Code Validation
-The Developer Bridge uses Python's AST (Abstract Syntax Tree) to parse and validate mathematical expressions in strategy conditions. The parser enforces a **whitelist model**:
-- ✓ Allowed: arithmetic operators (`+`, `-`, `*`, `/`), comparisons (`>`, `<`, `==`), logical ops (`and`, `or`)
-- ✓ Allowed: approved indicator names (e.g., `rsi`, `sma`) passed as variables
-- ✗ Rejected: function calls (prevents arbitrary code execution), imports, attribute access (outside pre-approved indicators)
+### Everything from alpha_spec.json becomes Python source
+That is the threat. A confirmed RCE lived here: `indicators[].params` values were interpolated
+into an f-string, so `{"period": "14, __x=open(...).write(...)"}` produced valid Python that ran
+on the first indicator access — silently, because `_safe_indicator` catches and returns the
+fallback. Three independent layers now stop it (`tests/test_rce_regression.py`, 16 tests):
 
-### Regime Alignment
-Strategy hyperparameters are keyed by market regime. This prevents overfitting to a single market state and ensures generalization across bull, bear, and ranging conditions.
+1. **Schema** — `indicators[].params` values must be **numbers**; names and keys must match
+   `^[A-Za-z_][A-Za-z0-9_]*$`; `additionalProperties: false` throughout.
+2. **Generator** — `_safe_identifier()` / `_safe_number()` re-check independently of the schema,
+   and `_safe_number` emits `repr()` of a validated number, never the caller's own text.
+3. **`ast.parse` before writing** — a file that never reaches disk is never imported.
+
+### AST-based condition validation
+Entry conditions are parsed and rewritten with a **whitelist**: arithmetic, comparisons, logical
+ops, and names that are either Jesse price fields or declared indicators. Calls and attribute
+access raise. An unrecognised bare name now raises too — previously it passed through, which is a
+blacklist wearing a whitelist's name.
+
+### Regime alignment — currently a no-op
+`_generate_params_content` builds `{'default': base_params, regime: base_params}`: the same object
+under two keys. Switching regime changes nothing. Worth knowing before trusting the word
+"regime-aware" anywhere in this repo.
+
+### Naming collisions with the framework
+The generated strategy must not define `hyperparameters` — Jesse's `Strategy` declares it as a
+**method** and calls it during route setup. It is named `regime_params` for exactly this reason.
+Exit orders go in `on_open_position()`, never `go_long()`: spot rejects the latter.
 
 ### Risk Guardrails
-- **Ruin Bias Check** (mandatory, Supervisor): `max_drawdown_limit_pct` must be ≤ 2.0% or `RuinBiasViolationError` is raised. The JSON schema also caps it at 2.0.
-- **Monte Carlo Risk of Ruin**: % of simulated paths breaching the drawdown limit; must be ≤ 5% to PASS, **and** the run must be bootstrap mode with ≥ 30 real trades (see `quant_validator.py`).
+- **Ruin Bias Check** (mandatory, Supervisor): `max_drawdown_limit_pct` must be ≤ 2.0% or
+  `RuinBiasViolationError` is raised. The JSON schema also caps it at 2.0. It is no longer
+  reachable from the dashboard query string.
+- **Monte Carlo Risk of Ruin**: ≤ 5% to PASS, bootstrap mode, ≥ 30 real trades. Skipped entirely
+  when `total_trades == 0` — resampling an empty sample yields 0% ruin, which is how a strategy
+  that cannot trade becomes the safest one on the board.
+- **Fail-closed metrics**: `validate_metrics` **raises** `MissingMetricError` on an unmeasured
+  metric. It used to wrap every check in `if x is not None`, so all-None metrics passed
+  deliberately severe constraints — and a test asserted that was correct.
+- **Provenance gate**: `validation_passed` is forced False unless `data_source == 'jesse'`.
+- **Sign check**: `stop_loss_value` and `take_profit_value` must be positive. `(-0.04)/(-0.02)`
+  is 2.0, so two negatives used to satisfy the risk-to-reward minimum.
+- **Unmeasured, and important:** real max drawdown on the control run was **−29%** against this
+  2% limit. Either the limit is renegotiated with evidence, or it is demonstrated — not obtained
+  by shrinking position size until a window complies.
 
 ### State & Concurrency Hardening
 The code comments track five hardening themes ("Vuln 1–5") worth preserving when editing:
@@ -264,10 +342,11 @@ For live trading deployment, refer to the detailed guides in `docs/`:
 
 **In `requirements.txt`:** `jesse` (backtesting framework; pins `pytest~=6.2.5`), `jsonschema` (≥4.0), `pydantic` (≥2.0), `pytest`.
 
-**Required at runtime but NOT in `requirements.txt`** (install manually for non-mock runs):
-- `ruff`, `vulture`, `xenon` — the static audit gate (`bin/sqe-audit.sh`).
+**Required at runtime but NOT in `requirements.txt`:**
+- `jesse` — in **`.venv-jesse`**, not the project venv. Without it the pipeline returns `NO_DATA`.
 - `fastapi`, `uvicorn` — the web dashboard server (`web_dashboard/main.py`).
-- `psycopg2` — only if using `db_pool.py` against a live Postgres (Jesse's DB).
+- `psycopg2` — only if using `db_pool.py`, which nothing in the pipeline imports.
+- `ruff` — optional, only to format generated code. No longer gates anything.
 
 The core CLI pipeline (`run_simulation.py`) runs without Jesse installed (mock path) but still expects ruff/vulture/xenon for the audit unless run under pytest.
 

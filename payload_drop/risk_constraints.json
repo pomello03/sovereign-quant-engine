@@ -1,8 +1,9 @@
 {
-  "max_drawdown_limit_pct": 2.0,
+  "max_drawdown_limit_pct": 20.0,
+  "max_risk_per_trade_pct": 1.0,
   "stop_loss_type": "fixed",
   "stop_loss_value": 0.02,
   "take_profit_value": 0.04,
   "risk_to_reward_minimum": 2.0,
-  "max_position_sizing_pct": 2.0
+  "max_position_sizing_pct": 1.0
 }

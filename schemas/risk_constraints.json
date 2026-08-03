@@ -1,14 +1,16 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "RiskConstraints",
+  "description": "Stop and take-profit are distances from entry, expressed as fractions of price. They are strictly positive: a negative pair cancels in the risk-to-reward ratio and passes a check it should fail. The drawdown ceiling is 30, not 2 — see core_engine/supervisor.py MAX_DRAWDOWN_CEILING_PCT for the measurement that changed it.",
   "type": "object",
   "properties": {
-    "max_drawdown_limit_pct": {"type": "number", "maximum": 2.0}, 
+    "max_drawdown_limit_pct": {"type": "number", "exclusiveMinimum": 0, "maximum": 30.0},
+    "max_risk_per_trade_pct": {"type": "number", "exclusiveMinimum": 0, "maximum": 5.0},
     "stop_loss_type": {"type": "string", "enum": ["fixed", "trailing", "atr"]},
-    "stop_loss_value": {"type": "number"},
-    "take_profit_value": {"type": "number"},
+    "stop_loss_value": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.5},
+    "take_profit_value": {"type": "number", "exclusiveMinimum": 0, "maximum": 1.0},
     "risk_to_reward_minimum": {"type": "number", "minimum": 1.5},
-    "max_position_sizing_pct": {"type": "number", "maximum": 5.0}
+    "max_position_sizing_pct": {"type": "number", "exclusiveMinimum": 0, "maximum": 5.0}
   },
   "required": ["max_drawdown_limit_pct", "stop_loss_type", "stop_loss_value", "max_position_sizing_pct"]
 }

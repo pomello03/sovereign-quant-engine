@@ -29,6 +29,13 @@ Desktop.ini
 # Virtual Environment
 venv/
 .venv/
+.venv-jesse/
+
+# Market data: large, and re-fetchable from the exchange. The .meta.json files
+# ARE tracked — they carry the sha256 and window that make a result reproducible.
+research/data/*.npy
+research/data/*.json
+!research/data/*.meta.json
 
 # Portable Git utility
 bin/MinGit/
@@ -36,3 +43,9 @@ bin/MinGit/
 # Personal Access Tokens / keys
 *PAT*
 Personal
+
+# Graphify knowledge graph (rigenerabile: /graphify)
+graphify-out/
+
+# Local tooling config
+.claude/

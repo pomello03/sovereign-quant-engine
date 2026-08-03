@@ -110,8 +110,9 @@ def test_generate_report(temp_payload_dir):
         "profit_factor_minimum": 1.3
     }
     
-    report = validator.generate_report(metrics, constraints, num_simulations=50)
-    
+    report = validator.generate_report(metrics, constraints, num_simulations=50,
+                                       provenance={"data_source": "jesse"})
+
     assert report["validation_passed"] is True
     assert report["metrics"] == metrics
     assert report["constraints"] == constraints
@@ -125,6 +126,34 @@ def test_generate_report(temp_payload_dir):
     with open(report_file, "r", encoding="utf-8") as f:
         loaded_report = json.load(f)
     assert loaded_report == report
+
+
+def test_generate_report_withholds_verdict_without_provenance(temp_payload_dir):
+    """Metrics good enough to pass still cannot pass if their origin is unknown.
+
+    A positive verdict is a claim about the market. Making that claim requires
+    having looked at one.
+    """
+    validator = QuantValidator(payload_drop_dir=str(temp_payload_dir))
+    metrics = {
+        "sharpe_ratio": 2.0, "max_drawdown": -1.0, "profit_factor": 1.8,
+        "total_trades": 40, "win_rate": 0.65,
+        "trade_returns": ([0.001, 0.002, -0.0005, 0.0015, 0.001, -0.0003,
+                           0.002, 0.001, -0.0004, 0.0012] * 4),
+    }
+    constraints = {"max_drawdown_limit_pct": 5.0, "sharpe_ratio_minimum": 1.5,
+                   "profit_factor_minimum": 1.3}
+
+    for provenance in (None, {"data_source": None}, {"data_source": "mock"}):
+        report = validator.generate_report(metrics, constraints, num_simulations=50,
+                                           provenance=provenance)
+        assert report["validation_passed"] is False
+        assert report["provenance_rejection"]
+
+    trusted = validator.generate_report(metrics, constraints, num_simulations=50,
+                                        provenance={"data_source": "jesse"})
+    assert trusted["validation_passed"] is True
+    assert trusted["provenance_rejection"] is None
 
 
 def test_generate_report_rejects_high_ruin(temp_payload_dir):
