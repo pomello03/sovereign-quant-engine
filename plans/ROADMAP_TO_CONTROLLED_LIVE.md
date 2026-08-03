@@ -10,6 +10,33 @@ Rifattorizzare, cancellare codice morto o migliorare la dashboard prima di P0-1 
 
 ---
 
+## Stato al 2026-08-03 (commit `0cd1f68`)
+
+| | task | esito |
+|---|---|---|
+| ✅ | **P0-1** primo array di trade reali | **0 trade.** Vedi [`research/RESULT_P0-1.md`](../research/RESULT_P0-1.md) |
+| ✅ | **P0-2** venue e strumento | **Bybit spot.** `routes.py` allineato; lo short non è eseguibile |
+| ✅ | **P0-3** il mock non può più produrre un verdetto | `mcp_executor.py` riscritto, 403 → 265 righe, zero percorsi mock |
+| ✅ | **P0-4** provenance | su ogni risultato; `validation_passed` richiede `data_source == 'jesse'` |
+| ✅ | **P0-5** vettore RCE | chiuso a 3 livelli, 16 test di regressione |
+| ✅ | **P0-6** fail-closed sulle metriche | `MissingMetricError`; default `or 100` / `or 1.5` rimossi |
+| ✅ | **P0-7** ottimizzatore sospeso | non invocato da nessuna parte; loop inline della dashboard cancellato |
+| ✅ | **P1-1** una sola base di rischio | `_stop_distance()` unica sorgente per sizing e stop |
+| ✅ | **P1-2** clamp sul nozionale | `MAX_NOTIONAL_PCT` nel template |
+| ✅ | **P1-3** schema che rifiuta valori assurdi | `exclusiveMinimum` + sign check nel Supervisor |
+| ✅ | **P1-7** logging ed exit code | `run_simulation.py` esce 0/1/2/3 |
+| ⬜ | **P1-4** modello di costi | fee reali già applicate nel backtest; manca slippage esplicito e la coppia LORDO/NETTO ovunque |
+| ⬜ | **P1-5** Monte Carlo onesto | block bootstrap, gate sul p95 |
+| ⬜ | **P1-6** registro esperimenti | `experiments.jsonl` |
+| ⬜ | **P2 · P3 · P4** | invariati |
+
+**Due risultati cambiano il seguito.** Primo: la strategia specificata non esiste, quindi P2 non ha
+oggetto finché non ne esiste una — e sceglierla guardando i dati è la cosa vietata dal protocollo.
+Secondo: il drawdown reale misurato è **−29 %** contro un limite di **2 %**. Il rischio "il limite
+DD 2 % è incompatibile col dominio", elencato in fondo a questo documento, **si è verificato**.
+
+---
+
 ## P0 — Verità operativa
 
 ### P0-1 · Il primo array di trade reali *(nessuna dipendenza)*
