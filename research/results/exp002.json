@@ -1,0 +1,46 @@
+{
+  "experiment": "EXP-002",
+  "window": [
+    "2023-01-01",
+    "2026-07-01"
+  ],
+  "primary": {
+    "lookback_days": 90,
+    "hold_k": 5,
+    "rebalance_days": 28,
+    "min_turnover_usd": 100000,
+    "fee_per_side": 0.001
+  },
+  "n_periods": 46,
+  "n_symbols_in_file": 416,
+  "eligible_per_rebalance": {
+    "min": 46,
+    "median": 180,
+    "max": 299
+  },
+  "strategy_net_pct": -93.70494491002059,
+  "strategy_max_drawdown_pct": 97.76637011163571,
+  "random_median_pct": -63.83696768332692,
+  "random_p95_pct": 25.607225587231692,
+  "percentile_vs_random": 0.53,
+  "equal_weight_net_pct": -47.19581276866794,
+  "btc_buy_hold_net_pct": 295.7028243208517,
+  "passes": false,
+  "sensitivity_net_pct": {
+    "L30_K3": -95.6,
+    "L30_K5": -86.65,
+    "L30_K10": -74.63,
+    "L60_K3": -98.62,
+    "L60_K5": -94.82,
+    "L60_K10": -76.5,
+    "L90_K3": -96.52,
+    "L90_K5": -93.7,
+    "L90_K10": -78.88,
+    "L120_K3": -88.12,
+    "L120_K5": -87.7,
+    "L120_K10": -82.05
+  },
+  "data_sha256": "8b5330d5b11eb135aeb5f7335102a6b2baba82edb6365de9b66a784115f05d6d",
+  "survivorship_warning": "Only pairs still listed and trading at fetch time are present. Delisted and dead coins are absent, which flatters any result computed on this universe. A random-selection baseline drawn from the same universe inherits the same bias, so relative comparisons remain meaningful while absolute returns do not.",
+  "run_at_utc": "2026-08-03T23:41:17.862681+00:00"
+}

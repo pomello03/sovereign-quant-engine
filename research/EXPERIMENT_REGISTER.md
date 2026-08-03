@@ -194,6 +194,57 @@ assoluto.
 
 **In nessuno dei due casi si modificano soglie, si aggiungono configurazioni o si riesegue.**
 
-### Esito
+### Esito — eseguito 2026-08-04, una volta sola
 
-*(da compilare dopo l'esecuzione, in un commit successivo)*
+416 coppie scaricate, `sha256:8b5330d5b11eb135…`, 46 ribilanciamenti dal 2023-01-01 al 2026-06-14.
+Universo eleggibile per periodo: min 46, mediana 180, max 299.
+
+| | netto | maxDD |
+|---|---:|---:|
+| **momentum cross-sectional (primaria)** | **−93.7 %** | 97.8 % |
+| 5 monete a caso, mediana | −63.8 % | |
+| 5 monete a caso, 95° percentile | +25.6 % | |
+| universo equipesato | −47.2 % | |
+| BTC comprato e tenuto | **+295.7 %** | |
+
+**La strategia sta allo 0.5° percentile della selezione casuale.** Non manca la barra: è peggio
+del 99.5 % delle scelte fatte a caso. Tutti e tre i criteri falliti. **VERDETTO: FALLITO.**
+
+Griglia di sensibilità, dodici celle: **tutte negative**, da −74.6 % a −98.6 %.
+
+### Cosa dice davvero questo risultato
+
+L'ipotesi era che il flusso retail si muovesse lentamente attraverso le monete minori, facendo
+persistere il momentum. **È refutata, e con il segno opposto.** Comprare le altcoin che sono
+appena salite è un modo affidabile di comprare il massimo. La consistenza delle dodici celle
+esclude che sia rumore: è un effetto reale nella direzione contraria.
+
+C'è poi un fatto che nessuno dei due esperimenti cercava, e che salta agli occhi: nella finestra,
+**BTC ha fatto +295.7 % mentre l'universo altcoin equipesato ha fatto −47.2 %.** Non è una
+strategia — è un'osservazione su un periodo specifico, e trattarla come una previsione sarebbe
+esattamente l'errore che questo registro esiste per prevenire.
+
+### La tentazione, nominata e rifiutata
+
+Il pensiero immediato è: *invertilo, compra i perdenti*. Non si fa, per due ragioni distinte:
+
+1. **La regola scritta sopra lo vieta.** "In nessuno dei due casi si modificano soglie, si
+   aggiungono configurazioni o si riesegue." La pre-registrazione vale solo se resiste al momento
+   in cui i risultati non piacciono. Questo è quel momento.
+2. **Sarebbe un'ipotesi generata dai dati.** Un'idea nata guardando questo risultato e testata su
+   questa stessa finestra non porta informazione: si sta descrivendo il passato, non prevedendo.
+   Testarla richiederebbe una **nuova** pre-registrazione su una finestra mai aperta — e resterebbe
+   comunque evidenza più debole di un'ipotesi formulata prima di guardare.
+
+### Conseguenza, per la regola scritta prima dell'esecuzione
+
+> *Fallisce → la conclusione onesta diventa: battere il mercato con dati di prezzo pubblici e
+> commissioni retail non è raggiungibile da questa postazione. Il progetto si ferma, e si ferma
+> con evidenza invece che per stanchezza.*
+
+**Il progetto si ferma qui.** Due ipotesi indipendenti, entrambe con un meccanismo dichiarato,
+entrambe pre-registrate, entrambe refutate su dati reali.
+
+Questo **non** dimostra che nessun edge esista. Dimostra che questi due, che erano i candidati
+ragionevoli accessibili da questa postazione, non ci sono. Vedi
+[`RESULT_DOMAIN.md`](RESULT_DOMAIN.md).

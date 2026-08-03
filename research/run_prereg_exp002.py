@@ -90,7 +90,13 @@ def eligible_at(i: int, close, turnover, lookback: int) -> np.ndarray:
     has_ends = np.isfinite(close[j0]) & np.isfinite(close[i]) & (close[j0] > 0)
     window = close[j0: i + 1]
     coverage = np.isfinite(window).mean(axis=0) > 0.9
-    med_turnover = np.nanmedian(turnover[j0: i + 1], axis=0)
+    with np.errstate(all="ignore"):
+        # A column that is all-NaN is a pair not yet listed at this date; the
+        # resulting NaN is then read as zero turnover, which excludes it.
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            med_turnover = np.nanmedian(turnover[j0: i + 1], axis=0)
     liquid = np.nan_to_num(med_turnover, nan=0.0) >= MIN_TURNOVER_USD
     return np.where(has_ends & coverage & liquid)[0]
 

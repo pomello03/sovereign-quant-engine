@@ -33,8 +33,14 @@ mai osservato mentre il prezzo sta sopra la sua media è **36.59**; la soglia è
 massimo il **91.6 %** del tempo, e zero percorsi casuali su mille sono rimasti sotto quella soglia.
 L'esposizione necessaria per rispettarla produce ordini sotto il minimo di 5 USDT dell'exchange.
 
-**EXP-001**, unico test pre-registrato: sei segnali standard, regole committate prima
-dell'esecuzione, soglia al 99.17° percentile (Bonferroni). **Zero superati.**
+**Due esperimenti pre-registrati, entrambi refutati.** Regole committate prima dell'esecuzione,
+eseguiti una volta sola, nessuna soglia rinegoziata dopo.
+
+- **EXP-001** — sei segnali tecnici classici su BTC, soglia al 99.17° percentile (Bonferroni).
+  Zero superati; il migliore al 75°.
+- **EXP-002** — momentum cross-sectional su 416 coppie, ribilanciato ogni 28 giorni.
+  **Allo 0.5° percentile** della selezione casuale: peggio del 99.5 % delle scelte a caso, con
+  dodici celle di sensibilità tutte negative. L'ipotesi esiste con il segno rovesciato.
 
 Dettaglio: [`research/RESULT_P0-1.md`](research/RESULT_P0-1.md) ·
 [`research/RESULT_DOMAIN.md`](research/RESULT_DOMAIN.md) ·

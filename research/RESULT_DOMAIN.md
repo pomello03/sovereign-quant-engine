@@ -119,6 +119,43 @@ artefatto della scorciatoia di calcolo.
 
 ---
 
+## EXP-002 · Momentum cross-sectional — la seconda ipotesi
+
+Domanda diversa da EXP-001: non *"quando comprare Bitcoin"* ma *"quali monete tenere"*,
+ribilanciando ogni 28 giorni su 416 coppie spot USDT (`sha256:8b5330d5b11eb135…`),
+46 ribilanciamenti dal 2023-01 al 2026-06. Regole committate prima dei dati (`5cff3fe`).
+
+Il meccanismo dichiarato: ribilanciando mensilmente il pedaggio dello 0.2 % si applica a un
+periodo in cui la dispersione fra la migliore e la peggiore moneta è di decine di punti — il
+cuscinetto passa da ~2× a ~100×, ed è il fattore che aveva ucciso EXP-001. Più una ragione
+plausibile per cui l'edge esista: le monete minori sono meno arbitraggiate e il flusso retail vi
+si muove lentamente.
+
+| | netto | maxDD |
+|---|---:|---:|
+| **momentum cross-sectional** | **−93.7 %** | 97.8 % |
+| 5 monete a caso, mediana | −63.8 % | |
+| 5 monete a caso, 95° percentile | +25.6 % | |
+| universo equipesato | −47.2 % | |
+| BTC comprato e tenuto | **+295.7 %** | |
+
+**Sta allo 0.5° percentile del caso.** Peggio del 99.5 % delle scelte casuali. Dodici celle di
+sensibilità, **tutte negative**, da −74.6 % a −98.6 %.
+
+L'ipotesi è refutata con il segno rovesciato: comprare le altcoin appena salite è un modo
+affidabile di comprare il massimo. La consistenza delle dodici celle esclude il rumore.
+
+E un fatto che nessuno dei due esperimenti cercava: nella finestra **BTC ha fatto +295.7 % mentre
+l'universo altcoin equipesato ha fatto −47.2 %.** Non è una strategia. È un'osservazione su un
+periodo, e trasformarla in previsione sarebbe l'errore che il registro esiste per prevenire.
+
+**Non si inverte.** L'idea di comprare i perdenti nasce *guardando questo risultato*: testarla su
+questa stessa finestra descriverebbe il passato, non prevederebbe nulla. Richiederebbe una nuova
+pre-registrazione su dati mai aperti, e resterebbe evidenza più debole di un'ipotesi formulata
+prima di guardare.
+
+---
+
 # Decisioni
 
 ## Decisione A — il limite di drawdown del 2 % è abbandonato
@@ -145,8 +182,17 @@ Un vincolo mai misurato non è prudenza, è un numero — ma un vincolo rilassat
 
 ## Decisione B — ci si ferma alla ricerca
 
-**Non c'è una strategia.** Sei segnali standard testati una volta sola, con le regole fissate
-prima, nessuno vicino alla soglia. Il migliore è al 75° percentile del caso puro.
+**Non c'è una strategia.** Due ipotesi indipendenti, entrambe con un meccanismo dichiarato,
+entrambe pre-registrate prima dell'esecuzione, entrambe refutate su dati reali:
+
+- **EXP-001**, temporizzazione su BTC: sei segnali classici, il migliore al 75° percentile del
+  caso. L'edge di un segnale di trend e il pedaggio commissionale hanno la stessa taglia.
+- **EXP-002**, selezione cross-sectional: allo 0.5° percentile del caso, dodici celle di
+  sensibilità tutte negative. Il meccanismo ipotizzato esiste con il segno opposto.
+
+Questo **non** dimostra che nessun edge esista. Dimostra che i due candidati ragionevoli
+accessibili da questa postazione — dati di prezzo pubblici, commissioni retail, un exchange —
+non ci sono, e che il modo in cui non ci sono è misurato e non congetturato.
 
 **Nessun capitale. Nessun layer di esecuzione.** Costruire il Gate D per una strategia senza edge
 dimostrato sono cinque giorni-uomo spesi per aumentare la superficie di rischio di zero vantaggio.
