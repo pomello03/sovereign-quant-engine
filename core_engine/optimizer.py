@@ -1,7 +1,33 @@
+"""Closed-loop search over risk parameters. Currently suspended.
+
+Nothing in the pipeline invokes this module: `run_simulation.py` no longer calls
+it and the copy of its loop that lived inside the SSE endpoint has been removed.
+It is kept because the search may become meaningful later, not because it is
+usable now.
+
+Two reasons it is not usable now:
+
+  - It selects on the window it reports. Shrinking position size until the
+    verdict flips, then presenting that verdict as validation, is choosing a
+    parameter on the evaluation set. Against the old mock metrics it was worse
+    than that: drawdown was literally `-(pos_size * sl * 100 * 3)`, so the loop
+    was inverting an equation it had itself written, and the committed
+    `optimization_history` reproduces exactly.
+  - Its central assumption is untested. Halving position size halves drawdown
+    only if drawdown is linear in sizing. On real candles that has never been
+    measured. Until P1-1 measures it, the heuristic has no ground.
+
+See plans/ROADMAP_TO_CONTROLLED_LIVE.md P0-7.
+"""
+
 import os
 import json
+import warnings
+
 from core_engine.developer_bridge import DeveloperBridge
 from core_engine.quant_validator import QuantValidator
+from core_engine.state_io import atomic_write_json
+
 
 class RiskOptimizer:
     def __init__(self, payload_drop_dir: str = None, workspace_path: str = None):
@@ -35,6 +61,12 @@ class RiskOptimizer:
         
         Varies 'max_position_sizing_pct' and 'stop_loss_value' until 'validation_passed' is True.
         """
+        warnings.warn(
+            "RiskOptimizer is suspended: it selects parameters on the same window it "
+            "then reports them on. See plans/ROADMAP_TO_CONTROLLED_LIVE.md P0-7.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         blueprint_path = os.path.join(self.payload_drop_dir, "strategy_blueprint.json")
         constraints_path = os.path.join(self.payload_drop_dir, "risk_constraints.json")
 
@@ -65,9 +97,17 @@ class RiskOptimizer:
             blueprint["risk"]["max_position_sizing_pct"] = pos_size
             blueprint["risk"]["stop_loss_value"] = sl
 
-            # 2. Write updated blueprint back to disk
-            with open(blueprint_path, "w", encoding="utf-8") as f:
-                json.dump(blueprint, f, indent=2)
+            # 2. Write updated blueprint back to disk.
+            # Atomically, so a dashboard reading concurrently never sees half a
+            # file — the raw json.dump this replaces also bypassed the
+            # Supervisor's Ruin Bias check, letting the loop write a blueprint
+            # that would have been rejected had it arrived through the front door.
+            if abs(sl) > 1.0 or pos_size <= 0 or sl <= 0:
+                raise ValueError(
+                    f"optimizer produced out-of-range risk parameters: "
+                    f"pos_size={pos_size}, stop_loss={sl}"
+                )
+            atomic_write_json(blueprint_path, blueprint, indent=2)
 
             # 3. Generate strategy code and format it
             self.bridge.generate_strategy_code(blueprint, force_clean=True)

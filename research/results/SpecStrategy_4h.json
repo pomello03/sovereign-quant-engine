@@ -1,0 +1,31 @@
+{
+  "verdict": "NO_TRADES",
+  "data_source": "bybit-public-api",
+  "data_sha256": "252993559a78e464e3eda7241aacea5b35efe35f2b018a9b33ee1a0108d30c8f",
+  "data_window": {
+    "first": "2024-01-01 00:00",
+    "last": "2026-06-30 23:59"
+  },
+  "warmup_window": {
+    "first": "2023-12-01 00:00",
+    "last": "2023-12-31 23:59"
+  },
+  "n_candles_1m": 1313280,
+  "exchange": "Bybit Spot",
+  "symbol": "BTC-USDT",
+  "timeframe": "4h",
+  "fee_per_side": 0.001,
+  "starting_balance": 10000,
+  "strategy": "SpecStrategy",
+  "strategy_sha256": "134bee9f9b682e3f39bf7b16baad4e30915ad2092f5e9cb9df040dcc7c877bec",
+  "jesse_version": "3.0.1",
+  "generated_at_utc": "2026-08-03T19:49:55.386472+00:00",
+  "metrics": {
+    "total": 0,
+    "win_rate": 0,
+    "net_profit_percentage": 0
+  },
+  "trade_summary": {
+    "n": 0
+  }
+}

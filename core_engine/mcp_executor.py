@@ -1,402 +1,290 @@
+"""Runs a backtest against real market data, or explains why it cannot.
+
+There is no mock path. The previous version of this module returned
+``status: "SUCCESS"`` with fabricated metrics from four separate branches
+whenever Jesse was missing, the CLI failed, or the candle database was empty,
+and the fabricated numbers were arithmetic on the blueprint's own risk
+parameters. Downstream code could not tell those numbers from measured ones,
+so every verdict the project ever produced described its own configuration.
+
+Two rules replace it:
+
+1. ``SUCCESS`` requires candles. Anything else is ``NO_DATA`` with
+   ``metrics: None``. An absent measurement is reported as absent.
+2. Every result carries provenance. A caller that cannot prove where a number
+   came from must be able to refuse it.
+
+The backtest runs in-process through ``jesse.research.backtest()``, which
+returns structured results including individual trades. The old version shelled
+out to the CLI and scraped the report table with regexes that never extracted
+per-trade returns — so the validator's bootstrap gate could only ever be
+satisfied by the mock, and a real backtest was rejected by construction.
+"""
+
+from __future__ import annotations
+
+import ast
+import hashlib
+import json
 import os
-import sys
-import subprocess
-import shutil
-import re
-from typing import Dict, Any
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
+
+STATUS_SUCCESS = "SUCCESS"
+STATUS_NO_DATA = "NO_DATA"
+STATUS_COMPILATION_ERROR = "COMPILATION_ERROR"
+STATUS_ERROR = "ERROR"
+
+DEFAULT_EXCHANGE = "Bybit Spot"
+DEFAULT_SYMBOL = "BTC-USDT"
+DEFAULT_TIMEFRAME = "4h"
+DEFAULT_FEE_PER_SIDE = 0.001  # Bybit spot, non-VIP
+DEFAULT_STARTING_BALANCE = 10_000
+WARMUP_MINUTES = 30 * 1440
+
 
 class MCPJesseRunner:
-    def __init__(self, workspace_path: str):
-        """
-        Constructor for MCPJesseRunner.
-        
-        Args:
-            workspace_path: Path to the Jesse workspace (e.g. "./jesse_workspace")
-        """
+    def __init__(
+        self,
+        workspace_path: str,
+        candles_path: Optional[str] = None,
+        exchange: str = DEFAULT_EXCHANGE,
+        symbol: str = DEFAULT_SYMBOL,
+        timeframe: str = DEFAULT_TIMEFRAME,
+        fee_per_side: float = DEFAULT_FEE_PER_SIDE,
+        starting_balance: float = DEFAULT_STARTING_BALANCE,
+    ) -> None:
         self.workspace_path = os.path.abspath(workspace_path)
+        self.project_root = os.path.dirname(self.workspace_path)
+        self.candles_path = candles_path or os.path.join(
+            self.project_root, "research", "data", "bybit_spot_BTCUSDT_1.npy"
+        )
+        self.exchange = exchange
+        self.symbol = symbol
+        self.timeframe = timeframe
+        self.fee_per_side = fee_per_side
+        self.starting_balance = starting_balance
 
-    @staticmethod
-    def _mock_trade_returns(pos_sizing_pct: float):
+    # ------------------------------------------------------------------ helpers
+
+    def _strategy_file(self) -> str:
+        return os.path.join(self.workspace_path, "strategies", "SovereignStrategy", "__init__.py")
+
+    def _no_data(self, reason: str, **extra: Any) -> Dict[str, Any]:
+        """The honest answer when no measurement is possible.
+
+        ``metrics`` is None rather than an empty dict: a caller that does
+        ``metrics.get('sharpe_ratio')`` should crash here, not silently read a
+        missing value as an acceptable one.
         """
-        Builds a deterministic sample of >= 30 per-trade returns whose
-        dispersion scales with position sizing. Used only for mock/fallback
-        backtests so the validator exercises the unbiased bootstrap path.
-        """
-        magnitude = max(pos_sizing_pct, 0.01) / 100.0  # e.g. 2.0% -> 0.02 per winning trade
-        wins = [magnitude] * 24            # 60% win rate
-        losses = [-1.1 * magnitude] * 16   # losers slightly larger than winners
-        return wins + losses
-
-    def run_backtest(self, start_date: str, end_date: str) -> Dict[str, Any]:
-        """
-        Runs the backtest using the Jesse CLI command: jesse backtest <start_date> <end_date>
-
-        Returns a dict with:
-        - status: "SUCCESS", "COMPILATION_ERROR", or "ERROR"
-        - metrics: Dict of extracted metrics (if status is "SUCCESS")
-        - stdout: Captured stdout text
-        - stderr: Captured stderr text
-        """
-        cmd = ["jesse", "backtest", start_date, end_date]
-        cwd = self.workspace_path
-        
-        # Ensure workspace directory exists
-        if not os.path.exists(cwd):
-            os.makedirs(cwd, exist_ok=True)
-
-        # 0. Execute static audit script before running the backtest
-        project_root = os.path.dirname(self.workspace_path)
-        audit_script = os.path.join(project_root, "bin", "sqe-audit.sh")
-        if os.path.exists(audit_script) and "PYTEST_CURRENT_TEST" not in os.environ:
-            shell_exe = None
-            if os.name == "nt":
-                # Prioritize known working paths for git/bash/sh on Windows
-                known_paths = [
-                    r"C:\Program Files\Git\bin\sh.exe",
-                    r"C:\Program Files\Git\bin\bash.exe",
-                    r"C:\Program Files\Git\usr\bin\sh.exe",
-                    r"C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\usr\bin\sh.exe"
-                ]
-                for p in known_paths:
-                    if os.path.exists(p):
-                        shell_exe = p
-                        break
-            
-            if not shell_exe:
-                candidate = shutil.which("sh") or shutil.which("bash")
-                if candidate and "system32" not in candidate.lower():
-                    shell_exe = candidate
-            
-            # Prepare environment with correct PATH and Python executable
-            env = os.environ.copy()
-            if shell_exe:
-                shell_dir = os.path.dirname(shell_exe)
-                env["PATH"] = shell_dir + os.pathsep + env.get("PATH", "")
-            python_dir = os.path.dirname(sys.executable)
-            env["PATH"] = python_dir + os.pathsep + env.get("PATH", "")
-            env["PYTHON"] = sys.executable
-            
-            audit_passed = True
-            audit_stdout = ""
-            audit_stderr = ""
-            
-            if shell_exe:
-                try:
-                    res = subprocess.run(
-                        [shell_exe, audit_script],
-                        cwd=project_root,
-                        capture_output=True,
-                        text=True,
-                        env=env
-                    )
-                    audit_passed = (res.returncode == 0)
-                    audit_stdout = res.stdout or ""
-                    audit_stderr = res.stderr or ""
-                except Exception as e:
-                    audit_passed = False
-                    audit_stderr = f"Failed to execute audit script with shell: {e}"
-            else:
-                # Direct python -m fallback in case no shell is found
-                try:
-                    ruff_res = subprocess.run(
-                        [sys.executable, "-m", "ruff", "check", "jesse_workspace/strategies/", "--select", "F,E,W,I,U"],
-                        cwd=project_root, capture_output=True, text=True, env=env
-                    )
-                    vulture_res = subprocess.run(
-                        [sys.executable, "-m", "vulture", "jesse_workspace/strategies/", "--min-confidence", "80"],
-                        cwd=project_root, capture_output=True, text=True, env=env
-                    )
-                    xenon_res = subprocess.run(
-                        [sys.executable, "-m", "xenon", "--max-absolute", "A", "--max-modules", "A", "--max-average", "B", "jesse_workspace/strategies/"],
-                        cwd=project_root, capture_output=True, text=True, env=env
-                    )
-                    audit_passed = (ruff_res.returncode == 0 and vulture_res.returncode == 0 and xenon_res.returncode == 0)
-                    audit_stdout = f"Ruff:\n{ruff_res.stdout}\nVulture:\n{vulture_res.stdout}\nXenon:\n{xenon_res.stdout}"
-                    audit_stderr = f"Ruff Err:\n{ruff_res.stderr}\nVulture Err:\n{vulture_res.stderr}\nXenon Err:\n{xenon_res.stderr}"
-                except Exception as e:
-                    audit_passed = False
-                    audit_stderr = f"Failed to execute python -m audits: {e}"
-            
-            if not audit_passed:
-                return {
-                    "status": "COMPILATION_ERROR",
-                    "stdout": audit_stdout + "\n[Static Audit Failure]",
-                    "stderr": audit_stderr
-                }
-
-        # 1. Check if jesse CLI is in the PATH
-        jesse_installed = shutil.which("jesse") is not None
-        
-        # Robust default mock metrics for fallback scenarios. Includes a
-        # realistic per-trade returns sample so the validator can run an
-        # unbiased bootstrap Monte Carlo (>= MIN_REAL_TRADES) instead of the
-        # look-ahead-prone parametric fallback (Vuln 5).
-        mock_metrics = {
-            "sharpe_ratio": 1.85,
-            "max_drawdown": -12.4,
-            "total_trades": 40,
-            "profit_factor": 1.45,
-            "win_rate": 0.55,
-            "trade_returns": self._mock_trade_returns(2.0)
+        return {
+            "status": STATUS_NO_DATA,
+            "metrics": None,
+            "provenance": self._provenance(data_source=None),
+            "reason": reason,
+            "stdout": "",
+            "stderr": "",
+            **extra,
         }
 
-        # Load blueprint to generate dynamic mock metrics if running in fallback/simulation
-        if "PYTEST_CURRENT_TEST" not in os.environ:
+    def _provenance(self, data_source: Optional[str], **extra: Any) -> Dict[str, Any]:
+        strategy_file = self._strategy_file()
+        strategy_hash = None
+        if os.path.exists(strategy_file):
+            with open(strategy_file, "rb") as fh:
+                strategy_hash = hashlib.sha256(fh.read()).hexdigest()
+        meta_path = os.path.splitext(self.candles_path)[0] + ".meta.json"
+        data_fingerprint = None
+        if data_source and os.path.exists(meta_path):
             try:
-                import json
-                blueprint_path = os.path.join(project_root, "payload_drop", "strategy_blueprint.json")
-                bp = {}
-                if os.path.exists(blueprint_path):
-                    with open(blueprint_path, "r", encoding="utf-8") as f:
-                        bp = json.load(f)
-                risk_bp = bp.get("risk", {})
-                pos_sizing = risk_bp.get("max_position_sizing_pct", 2.0)
-                sl = risk_bp.get("stop_loss_value", 0.02)
-                
-                # Drawdown scales down with smaller position sizing and smaller stop loss
-                # e.g., 2.0% pos size, 0.02 SL => 12.0% drawdown. If pos size = 0.2%, drawdown => 1.2%
-                simulated_drawdown = -round(pos_sizing * sl * 100.0 * 3.0, 2)
-                simulated_sharpe = round((0.04 / sl) * 0.9, 2)
-                
-                mock_metrics = {
-                    "sharpe_ratio": simulated_sharpe,
-                    "max_drawdown": simulated_drawdown,
-                    "total_trades": 40,
-                    "profit_factor": round(0.04 / sl, 2),
-                    "win_rate": 0.55,
-                    # Per-trade swings scale with position sizing: shrinking the
-                    # position lowers dispersion -> lower simulated risk of ruin,
-                    # which is what lets the RiskOptimizer converge.
-                    "trade_returns": self._mock_trade_returns(pos_sizing)
-                }
-            except Exception:
-                pass
+                with open(meta_path, "r", encoding="utf-8") as fh:
+                    data_fingerprint = json.load(fh).get("sha256")
+            except (OSError, json.JSONDecodeError):
+                data_fingerprint = None
+        return {
+            "data_source": data_source,
+            "data_fingerprint": data_fingerprint,
+            "candles_path": self.candles_path if data_source else None,
+            "exchange": self.exchange,
+            "symbol": self.symbol,
+            "timeframe": self.timeframe,
+            "fee_per_side": self.fee_per_side,
+            "starting_balance": self.starting_balance,
+            "strategy_sha256": strategy_hash,
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            **extra,
+        }
 
-        if not jesse_installed:
+    def _check_strategy_compiles(self) -> Optional[str]:
+        """Parse and compile the generated strategy.
+
+        This replaces the old ruff/vulture/xenon subprocess gate, which mapped
+        any non-zero exit to COMPILATION_ERROR — so an uninstalled linter was
+        indistinguishable from broken generated code, and the bridge would
+        regenerate perfectly valid code three times before giving up.
+        Compiling the file answers the only question that gate really had.
+        """
+        path = self._strategy_file()
+        if not os.path.exists(path):
+            return f"generated strategy not found at {path}"
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                source = fh.read()
+            ast.parse(source, filename=path)
+            compile(source, path, "exec")
+        except (SyntaxError, ValueError) as exc:
+            return f"{type(exc).__name__}: {exc}"
+        return None
+
+    # ------------------------------------------------------------------- public
+
+    def run_backtest(self, start_date: str, end_date: str) -> Dict[str, Any]:
+        """Backtest the generated strategy over [start_date, end_date).
+
+        Returns a dict with ``status``, ``metrics`` (None unless SUCCESS) and
+        ``provenance``. ``SUCCESS`` is returned only when real candles were
+        loaded and the simulation ran to completion.
+        """
+        compile_error = self._check_strategy_compiles()
+        if compile_error:
             return {
-                "status": "SUCCESS",
-                "metrics": mock_metrics,
-                "stdout": "Mock execution: Jesse CLI not installed/found in system path.",
-                "stderr": ""
+                "status": STATUS_COMPILATION_ERROR,
+                "metrics": None,
+                "provenance": self._provenance(data_source=None),
+                "reason": compile_error,
+                "stdout": "",
+                "stderr": compile_error,
             }
 
         try:
-            # Run the command
-            if os.name == "nt":
-                # On Windows, run with shell=True and a string command for batch file wrappers
-                cmd_str = f'jesse backtest "{start_date}" "{end_date}"'
-                result = subprocess.run(
-                    cmd_str,
-                    cwd=cwd,
-                    capture_output=True,
-                    text=True,
-                    shell=True
-                )
-            else:
-                result = subprocess.run(
-                    cmd,
-                    cwd=cwd,
-                    capture_output=True,
-                    text=True
-                )
+            import numpy as np
+            from jesse import research
+        except ImportError as exc:
+            return self._no_data(
+                f"jesse is not importable in this interpreter ({exc}). "
+                "Real backtests run under .venv-jesse; see research/README.md."
+            )
 
-            stdout = result.stdout or ""
-            stderr = result.stderr or ""
-            combined_output = (stdout + "\n" + stderr).lower()
+        if not os.path.exists(self.candles_path):
+            return self._no_data(
+                f"no candle file at {self.candles_path}. "
+                "Fetch it with research/fetch_bybit_candles.py."
+            )
 
-            # Handle case where shell=True command-not-found error occurs
-            # On Windows, cmd /c returns exit code 1 or 9009 if a command is not recognized
-            if result.returncode != 0 and ("is not recognized" in combined_output or "not found" in combined_output or "no such file" in combined_output):
-                return {
-                    "status": "SUCCESS",
-                    "metrics": mock_metrics,
-                    "stdout": stdout + "\n[Mocked: Jesse CLI failed to execute (command not recognized)]",
-                    "stderr": stderr
-                }
+        try:
+            candles = np.load(self.candles_path)
+            warmup, trading = self._split_window(candles, start_date, end_date)
+        except (OSError, ValueError) as exc:
+            return self._no_data(f"could not load candles: {exc}")
 
-            if result.returncode == 0:
-                # Success, parse metrics
-                metrics = self._parse_jesse_output(stdout)
-                return {
-                    "status": "SUCCESS",
-                    "metrics": metrics,
-                    "stdout": stdout,
-                    "stderr": stderr
-                }
-            else:
-                # Jesse command exited with non-zero code.
-                # Check if it failed specifically due to lack of historical data
-                missing_data_keywords = [
-                    "candlenotfoundindatabase",
-                    "no candles found",
-                    "no candles",
-                    "database does not contain",
-                    "has no candles",
-                    "candles lookup failed"
-                ]
-                is_missing_data = any(kw in combined_output for kw in missing_data_keywords)
+        if trading is None or len(trading) == 0:
+            return self._no_data(
+                f"candle file does not cover {start_date}..{end_date}"
+            )
+        if len(warmup) < WARMUP_MINUTES * 0.9:
+            return self._no_data(
+                f"only {len(warmup)} warm-up candles before {start_date}; "
+                f"need about {WARMUP_MINUTES}. Indicators would warm up on the "
+                "evaluation window itself."
+            )
 
-                if is_missing_data:
-                    return {
-                        "status": "SUCCESS",
-                        "metrics": mock_metrics,
-                        "stdout": stdout + "\n[Mocked due to missing historical data in test environment]",
-                        "stderr": stderr
-                    }
-
-                # Check if it's a python syntax or compilation error in the strategy
-                compilation_error_keywords = [
-                    "syntaxerror",
-                    "indentationerror",
-                    "compilation_error",
-                    "taberror",
-                    "compileerror",
-                    "traceback"
-                ]
-                # If there's a SyntaxError or IndentationError, we classify as COMPILATION_ERROR
-                # Otherwise, default to ERROR
-                is_compilation_error = any(kw in combined_output for kw in compilation_error_keywords[:5])
-                status = "COMPILATION_ERROR" if is_compilation_error else "ERROR"
-                
-                return {
-                    "status": status,
-                    "stdout": stdout,
-                    "stderr": stderr
-                }
-
-        except FileNotFoundError:
-            # FileNotFoundError happens if shell=False and command is not found
+        try:
+            result = self._run_jesse(research, warmup, trading)
+        except Exception as exc:  # noqa: BLE001 - surfaced verbatim, never swallowed
             return {
-                "status": "SUCCESS",
-                "metrics": mock_metrics,
-                "stdout": "Mock execution: jesse CLI executable not found on system.",
-                "stderr": ""
-            }
-        except Exception as e:
-            return {
-                "status": "ERROR",
+                "status": STATUS_ERROR,
+                "metrics": None,
+                "provenance": self._provenance(data_source=None),
+                "reason": f"{type(exc).__name__}: {exc}",
                 "stdout": "",
-                "stderr": str(e)
+                "stderr": f"{type(exc).__name__}: {exc}",
             }
 
-    def _parse_jesse_output(self, stdout_text: str) -> Dict[str, Any]:
-        """
-        Parses Jesse backtest stdout report to extract key metrics.
-        Looks for: Sharpe Ratio, Max Drawdown, Total Trades, Profit Factor, Win Rate.
-        
-        Args:
-            stdout_text: stdout from Jesse run
-            
-        Returns:
-            Dict containing the parsed metrics.
-        """
-        metrics = {
-            "sharpe_ratio": None,
-            "max_drawdown": None,
-            "total_trades": None,
-            "profit_factor": None,
-            "win_rate": None
+        return result
+
+    # ----------------------------------------------------------------- internal
+
+    @staticmethod
+    def _to_ms(date_str: str) -> int:
+        return int(
+            datetime.strptime(date_str, "%Y-%m-%d")
+            .replace(tzinfo=timezone.utc)
+            .timestamp()
+            * 1000
+        )
+
+    def _split_window(self, candles, start_date: str, end_date: str):
+        start_ms, end_ms = self._to_ms(start_date), self._to_ms(end_date)
+        warmup = candles[candles[:, 0] < start_ms]
+        trading = candles[(candles[:, 0] >= start_ms) & (candles[:, 0] < end_ms)]
+        return warmup, trading
+
+    def _run_jesse(self, research, warmup, trading) -> Dict[str, Any]:
+        from jesse_workspace.strategies.SovereignStrategy import SovereignStrategy
+
+        key = f"{self.exchange}-{self.symbol}"
+        config = {
+            "starting_balance": self.starting_balance,
+            "fee": self.fee_per_side,
+            "type": "spot",
+            "exchange": self.exchange,
+            "warm_up_candles": 0,
         }
-        
-        if not stdout_text:
-            return metrics
+        routes = [
+            {
+                "exchange": self.exchange,
+                "strategy": SovereignStrategy,
+                "symbol": self.symbol,
+                "timeframe": self.timeframe,
+            }
+        ]
+        payload = {key: {"exchange": self.exchange, "symbol": self.symbol, "candles": trading}}
+        warm = {key: {"exchange": self.exchange, "symbol": self.symbol, "candles": warmup}}
 
-        # Parse line by line
-        for line in stdout_text.splitlines():
-            # Check for table borders or standard colon separation
-            if "|" in line:
-                parts = [p.strip() for p in line.split("|")]
-                if len(parts) >= 2:
-                    key = parts[0].lower().replace("_", " ").strip()
-                    val = parts[1].strip()
-                    self._extract_metric_from_key_val(key, val, metrics)
-            elif ":" in line:
-                parts = [p.strip() for p in line.split(":", 1)]
-                if len(parts) == 2:
-                    key = parts[0].lower().replace("_", " ").strip()
-                    val = parts[1].strip()
-                    self._extract_metric_from_key_val(key, val, metrics)
+        raw = research.backtest(config, routes, [], payload, warmup_candles=warm)
+        jesse_metrics = raw.get("metrics") or {}
+        trades = raw.get("trades") or []
 
-        # Fallback regex search if any metrics are still None
-        if metrics["sharpe_ratio"] is None:
-            match = re.search(r"sharpe\s+ratio[^\n]*?\s*(-?\d+\.?\d+)", stdout_text, re.IGNORECASE)
-            if match:
-                try:
-                    metrics["sharpe_ratio"] = float(match.group(1))
-                except ValueError:
-                    pass
+        metrics = {
+            "sharpe_ratio": jesse_metrics.get("sharpe_ratio"),
+            "max_drawdown": jesse_metrics.get("max_drawdown"),
+            "total_trades": int(jesse_metrics.get("total") or 0),
+            "profit_factor": self._profit_factor(trades),
+            "win_rate": jesse_metrics.get("win_rate"),
+            # The reason this module exists. Without per-trade returns the
+            # validator's bootstrap gate cannot be satisfied by real data at all.
+            "trade_returns": [float(t["PNL"]) / self.starting_balance for t in trades],
+            "net_profit": jesse_metrics.get("net_profit"),
+            "total_fees": round(sum(float(t["fee"]) for t in trades), 2),
+            "max_notional_pct_of_equity": (
+                round(100 * max(float(t["size"]) for t in trades) / self.starting_balance, 2)
+                if trades
+                else None
+            ),
+        }
 
-        if metrics["max_drawdown"] is None:
-            match = re.search(r"max(?:imum)?\s+drawdown[^\n]*?\s*(-?\d+\.?\d+)%?", stdout_text, re.IGNORECASE)
-            if match:
-                try:
-                    metrics["max_drawdown"] = float(match.group(1))
-                except ValueError:
-                    pass
+        return {
+            "status": STATUS_SUCCESS,
+            "metrics": metrics,
+            "provenance": self._provenance(
+                data_source="jesse",
+                n_candles_1m=int(len(trading)),
+                window_first=self._iso(trading[0][0]),
+                window_last=self._iso(trading[-1][0]),
+            ),
+            "reason": None,
+            "stdout": "",
+            "stderr": "",
+        }
 
-        if metrics["total_trades"] is None:
-            match = re.search(r"total\s+trades[^\n]*?\s*(\d+)", stdout_text, re.IGNORECASE)
-            if match:
-                try:
-                    metrics["total_trades"] = int(match.group(1))
-                except ValueError:
-                    pass
+    @staticmethod
+    def _iso(ms: float) -> str:
+        return datetime.fromtimestamp(ms / 1000, timezone.utc).isoformat()
 
-        if metrics["profit_factor"] is None:
-            match = re.search(r"profit\s+factor[^\n]*?\s*(-?\d+\.?\d+)", stdout_text, re.IGNORECASE)
-            if match:
-                try:
-                    metrics["profit_factor"] = float(match.group(1))
-                except ValueError:
-                    pass
-
-        if metrics["win_rate"] is None:
-            match = re.search(r"win\s+rate[^\n]*?\s*(\d+\.?\d*)%?", stdout_text, re.IGNORECASE)
-            if match:
-                try:
-                    val_float = float(match.group(1))
-                    if val_float > 1.0:
-                        metrics["win_rate"] = val_float / 100.0
-                    else:
-                        metrics["win_rate"] = val_float
-                except ValueError:
-                    pass
-
-        return metrics
-
-    def _extract_metric_from_key_val(self, key: str, val: str, metrics: Dict[str, Any]):
-        # Clean the value by removing currency symbols, percent signs, and whitespace
-        clean_val = val.replace("%", "").replace("$", "").replace("€", "").strip()
-        if clean_val.endswith("."):
-            clean_val = clean_val[:-1]
-
-        if "sharpe ratio" in key or key == "sharpe":
-            try:
-                metrics["sharpe_ratio"] = float(clean_val)
-            except ValueError:
-                pass
-        elif "max drawdown" in key or key == "drawdown":
-            try:
-                metrics["max_drawdown"] = float(clean_val)
-            except ValueError:
-                pass
-        elif "total trades" in key or key == "trades" or key == "total trade":
-            try:
-                metrics["total_trades"] = int(clean_val)
-            except ValueError:
-                pass
-        elif "profit factor" in key:
-            try:
-                metrics["profit_factor"] = float(clean_val)
-            except ValueError:
-                pass
-        elif "win rate" in key:
-            try:
-                is_percent = "%" in val
-                val_float = float(clean_val)
-                if is_percent or val_float > 1.0:
-                    metrics["win_rate"] = val_float / 100.0
-                else:
-                    metrics["win_rate"] = val_float
-            except ValueError:
-                pass
+    @staticmethod
+    def _profit_factor(trades: list) -> Optional[float]:
+        gross_win = sum(float(t["PNL"]) for t in trades if float(t["PNL"]) > 0)
+        gross_loss = abs(sum(float(t["PNL"]) for t in trades if float(t["PNL"]) < 0))
+        if not gross_loss:
+            return None
+        return round(gross_win / gross_loss, 4)

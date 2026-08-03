@@ -122,6 +122,15 @@ class Supervisor:
         if tp is not None and sl is not None and min_rr is not None:
             if sl == 0:
                 raise ValidationError("Risk constraints validation error: stop_loss_value cannot be zero")
+            # Sign check before the ratio. Both being negative cancels out:
+            # (-0.04) / (-0.02) = 2.0 satisfied the minimum, so a stop placed on
+            # the wrong side of entry passed the risk gate.
+            if sl < 0 or tp < 0:
+                raise ValidationError(
+                    f"Risk constraints validation error: stop_loss_value ({sl}) and "
+                    f"take_profit_value ({tp}) are distances and must both be positive. "
+                    f"Their ratio alone cannot detect two negatives."
+                )
             actual_rr = tp / sl
             if actual_rr < min_rr:
                 raise ValidationError(

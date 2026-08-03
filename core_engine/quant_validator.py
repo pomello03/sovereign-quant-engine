@@ -6,12 +6,31 @@ from datetime import datetime, timezone
 from typing import Dict, Any
 from core_engine.state_io import atomic_write_json
 
+class MissingMetricError(ValueError):
+    """A gate was asked to judge a metric that was never measured.
+
+    Raised instead of skipping the gate. The previous behaviour — `if x is not
+    None` around every check — meant a metrics dict full of None values passed
+    every constraint, including deliberately severe ones.
+    """
+
+
+class UnprovenDataError(ValueError):
+    """A verdict was requested on results whose origin cannot be established."""
+
+
 class QuantValidator:
     # Minimum number of real, per-trade returns required for an unbiased
     # Monte Carlo stress test. Below this, results are statistically
     # meaningless and an inactive strategy (0 trades -> 0% ruin) would
     # otherwise be validated as a false positive (Vuln 5).
     MIN_REAL_TRADES = 30
+
+    # Metrics every gate below depends on. Absence is an error, not a pass.
+    REQUIRED_METRICS = ("max_drawdown", "sharpe_ratio", "profit_factor")
+
+    # Only results carrying this provenance may produce a positive verdict.
+    TRUSTED_DATA_SOURCES = ("jesse",)
 
     def __init__(self, payload_drop_dir: str = None):
         """
@@ -30,27 +49,42 @@ class QuantValidator:
             
         Returns:
             bool: True if the metrics meet the constraints, False otherwise.
+
+        Raises:
+            MissingMetricError: if metrics is None, or any required metric is
+                absent. A gate that cannot see a value must not wave it through.
         """
-        # 1. Max Drawdown Check (Drawdown is often negative in Jesse output, so abs() is used)
-        max_dd = metrics.get("max_drawdown")
+        if metrics is None:
+            raise MissingMetricError("no metrics to validate (metrics is None)")
+
+        # A strategy that never traded has no profit factor, and that is a
+        # meaningful state rather than a missing one: report it as such instead
+        # of failing on the absent metric.
+        if metrics.get("total_trades") == 0:
+            return False
+
+        missing = [k for k in self.REQUIRED_METRICS if metrics.get(k) is None]
+        if missing:
+            raise MissingMetricError(
+                f"cannot judge a strategy on metrics that were never measured: {missing}"
+            )
+
+        # 1. Max Drawdown (negative in Jesse output, so compared by magnitude)
         limit_pct = constraints.get("max_drawdown_limit_pct")
-        if max_dd is not None and limit_pct is not None:
-            if abs(max_dd) > limit_pct:
-                return False
+        if limit_pct is None:
+            raise MissingMetricError("constraints lack max_drawdown_limit_pct")
+        if abs(metrics["max_drawdown"]) > limit_pct:
+            return False
 
-        # 2. Sharpe Ratio Check
-        sharpe = metrics.get("sharpe_ratio")
+        # 2. Sharpe Ratio
         min_sharpe = constraints.get("sharpe_ratio_minimum", constraints.get("min_sharpe", 1.0))
-        if sharpe is not None and min_sharpe is not None:
-            if sharpe < min_sharpe:
-                return False
+        if metrics["sharpe_ratio"] < min_sharpe:
+            return False
 
-        # 3. Profit Factor Check
-        pf = metrics.get("profit_factor")
+        # 3. Profit Factor
         min_pf = constraints.get("profit_factor_minimum", constraints.get("min_profit_factor", 1.0))
-        if pf is not None and min_pf is not None:
-            if pf < min_pf:
-                return False
+        if metrics["profit_factor"] < min_pf:
+            return False
 
         return True
 
@@ -120,17 +154,19 @@ class QuantValidator:
         Returns:
             dict with simulation results (risk_of_ruin, average_max_drawdown, etc.)
         """
-        total_trades = metrics.get("total_trades") or 100
-        # Ensure total_trades is at least 10 for simulation
-        total_trades = max(total_trades, 10)
-        
-        profit_factor = metrics.get("profit_factor") or 1.5
-        if profit_factor <= 0:
-            profit_factor = 1.5
-            
+        # No silent stand-ins. The old defaults (`or 100` trades, `or 1.5`
+        # profit factor) meant an empty metrics dict produced a fully-formed
+        # simulation of a strategy that did not exist.
+        if metrics is None:
+            raise MissingMetricError("no metrics to simulate (metrics is None)")
+
+        total_trades = metrics.get("total_trades")
+        if total_trades is None:
+            raise MissingMetricError("total_trades is required to simulate a path")
+        total_trades = max(int(total_trades), 10)
+
+        profit_factor = metrics.get("profit_factor")
         win_rate = metrics.get("win_rate")
-        if win_rate is None or not (0.0 < win_rate < 1.0):
-            win_rate = 0.50
         
         # Determine simulation mode
         trade_returns = metrics.get("trade_returns")
@@ -144,6 +180,14 @@ class QuantValidator:
             # bias, Vuln 5). Parametric mode is a diagnostic/visualization
             # fallback only and is rejected by validate_with_monte_carlo, which
             # requires empirical per-trade returns (bootstrap mode).
+            if profit_factor is None or profit_factor <= 0:
+                raise MissingMetricError(
+                    "parametric mode needs a positive profit_factor; none was measured"
+                )
+            if win_rate is None or not (0.0 < win_rate < 1.0):
+                raise MissingMetricError(
+                    f"parametric mode needs a win_rate in (0, 1); got {win_rate!r}"
+                )
             mean_win = profit_factor * 0.01
             sigma_win = 0.005
             mu_win = math.log(mean_win) - 0.5 * sigma_win ** 2
@@ -156,9 +200,9 @@ class QuantValidator:
         equity_trajectories = []
         drawdown_trajectories = []
 
-        # Set random seed if provided (for deterministic/testable results)
-        if seed is not None:
-            random.seed(seed)
+        # A local generator, so a seeded run here does not silently change what
+        # every other caller of `random` in the process gets afterwards.
+        rng = random.Random(seed)
 
         for sim_index in range(num_simulations):
             equity = 100.0
@@ -172,13 +216,13 @@ class QuantValidator:
 
             if use_bootstrap:
                 # Non-parametric bootstrap: sample from actual trade returns
-                sim_returns = random.choices(trade_returns, k=total_trades)
+                sim_returns = rng.choices(trade_returns, k=total_trades)
             else:
                 # Parametric log-normal mixture model
                 sim_returns = [
-                    random.lognormvariate(mu_win, sigma_win)
-                    if random.random() < win_rate
-                    else -random.lognormvariate(mu_loss, sigma_loss)
+                    rng.lognormvariate(mu_win, sigma_win)
+                    if rng.random() < win_rate
+                    else -rng.lognormvariate(mu_loss, sigma_loss)
                     for _ in range(total_trades)
                 ]
 
@@ -245,7 +289,8 @@ class QuantValidator:
 
     def generate_report(self, metrics: dict, constraints: dict, num_simulations: int = 100,
                         optimization_history: list = None, strategy_code: str = None,
-                        blueprint: dict = None, mc_results: dict = None) -> dict:
+                        blueprint: dict = None, mc_results: dict = None,
+                        provenance: dict = None) -> dict:
         """
         Validates metrics, runs Monte Carlo, and writes the final validation report.
         Also generates the premium HTML validation dashboard (two-file architecture:
@@ -266,13 +311,43 @@ class QuantValidator:
         """
         drawdown_limit = constraints.get("max_drawdown_limit_pct", 2.0)
 
-        if mc_results is None:
+        # A strategy that opened no positions is a definite answer, not a bad
+        # score and not an error. There is nothing to resample, so the stress
+        # test is skipped rather than fed an empty sample — resampling nothing
+        # yields a 0% risk of ruin, which is how a strategy that cannot trade
+        # comes to look like the safest one available.
+        if (metrics or {}).get("total_trades") == 0:
+            mc_results = {
+                "simulation_mode": "not_applicable",
+                "real_trades_used": 0,
+                "risk_of_ruin": None,
+                "average_max_drawdown": None,
+                "peak_simulated_drawdown": None,
+                "drawdown_limit_used": drawdown_limit,
+                "num_simulations": 0,
+                "note": "no trades were opened; there is nothing to stress test",
+            }
+        elif mc_results is None:
             mc_results = self.run_monte_carlo(metrics, num_simulations, drawdown_limit,
                                               collect_trajectories=50)
         # Full validation: base metrics + Monte Carlo stress test
         validation_passed = self.validate_with_monte_carlo(
             metrics, constraints, mc_results
         )
+
+        # Provenance gate. A positive verdict is a claim about the market, and a
+        # claim about the market requires having looked at one. Results whose
+        # origin is unknown or untrusted can be reported, but never as a pass.
+        data_source = (provenance or {}).get("data_source")
+        provenance_ok = data_source in self.TRUSTED_DATA_SOURCES
+        if validation_passed and not provenance_ok:
+            validation_passed = False
+            provenance_rejection = (
+                f"verdict withheld: data_source={data_source!r} is not one of "
+                f"{self.TRUSTED_DATA_SOURCES}"
+            )
+        else:
+            provenance_rejection = None
 
         backtest_equity_curve, backtest_drawdown_curve = self._build_backtest_curves(
             metrics.get("trade_returns")
@@ -282,6 +357,15 @@ class QuantValidator:
             "metrics": metrics,
             "constraints": constraints,
             "validation_passed": validation_passed,
+            # Three outcomes, kept distinct. "FAILED" says the strategy traded
+            # and did badly; "NO_TRADES" says it never traded at all. Collapsing
+            # them loses the only fact that actually explains the run.
+            "verdict": (
+                "NO_TRADES" if (metrics or {}).get("total_trades") == 0
+                else ("PASSED" if validation_passed else "FAILED")
+            ),
+            "provenance": provenance or {"data_source": None},
+            "provenance_rejection": provenance_rejection,
             "monte_carlo_results": mc_results,
             "optimization_history": optimization_history or [],
             "strategy_blueprint": blueprint,

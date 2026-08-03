@@ -5,7 +5,7 @@ import pytest
 from jsonschema import ValidationError
 from core_engine.supervisor import Supervisor, RuinBiasViolationError
 from core_engine.developer_bridge import DeveloperBridge
-from core_engine.quant_validator import QuantValidator
+from core_engine.quant_validator import MissingMetricError, QuantValidator
 from core_engine.state_io import StaleStateError
 
 
@@ -90,14 +90,28 @@ def bridge(tmp_path):
 class TestSupervisorEdgeCases:
 
     def test_supervisor_zero_stop_loss(self, temp_payload_dir, valid_payloads):
-        """stop_loss_value=0 must be rejected because it causes a division-by-zero
-        in the risk-to-reward check."""
+        """stop_loss_value=0 must be rejected.
+
+        The schema now rejects it via exclusiveMinimum before the code-level
+        division-by-zero guard is reached, so the message differs; both refuse.
+        """
         alpha, risk, context = valid_payloads
         risk["stop_loss_value"] = 0
         write_payload_files(temp_payload_dir, alpha, risk, context)
 
         supervisor = Supervisor(schemas_dir=REAL_SCHEMAS_DIR, payload_drop_dir=str(temp_payload_dir))
-        with pytest.raises(ValidationError, match="stop_loss_value cannot be zero"):
+        with pytest.raises(ValidationError):
+            supervisor.validate_and_generate()
+
+    def test_supervisor_rejects_negative_stop_and_target(self, temp_payload_dir, valid_payloads):
+        """Two negatives cancel in the ratio: (-0.04)/(-0.02) = 2.0 used to pass."""
+        alpha, risk, context = valid_payloads
+        risk["stop_loss_value"] = -0.02
+        risk["take_profit_value"] = -0.04
+        write_payload_files(temp_payload_dir, alpha, risk, context)
+
+        supervisor = Supervisor(schemas_dir=REAL_SCHEMAS_DIR, payload_drop_dir=str(temp_payload_dir))
+        with pytest.raises(ValidationError):
             supervisor.validate_and_generate()
 
     def test_supervisor_rejects_stale_alpha_spec(self, temp_payload_dir, valid_payloads):
@@ -292,8 +306,16 @@ class TestValidatorEdgeCases:
 
     # --- validate_metrics with None values ---
 
-    def test_validate_metrics_none_values_pass(self):
-        """Metrics that are None are skipped and should not cause a failure."""
+    def test_validate_metrics_none_values_raise(self):
+        """Unmeasured metrics must raise, not sail through every gate.
+
+        This test used to assert the opposite, and it was right about the code:
+        each check was wrapped in `if x is not None`, so a metrics dict of all
+        None satisfied even deliberately severe constraints. That is the
+        behaviour being removed, so the assertion is inverted rather than the
+        test deleted — the record of what was once considered correct is worth
+        keeping.
+        """
         validator = QuantValidator()
         metrics = {
             "sharpe_ratio": None,
@@ -305,7 +327,25 @@ class TestValidatorEdgeCases:
             "sharpe_ratio_minimum": 1.5,
             "profit_factor_minimum": 1.2
         }
-        assert validator.validate_metrics(metrics, constraints) is True
+        with pytest.raises(MissingMetricError):
+            validator.validate_metrics(metrics, constraints)
+
+    def test_validate_metrics_rejects_none_metrics_object(self):
+        validator = QuantValidator()
+        with pytest.raises(MissingMetricError):
+            validator.validate_metrics(None, {"max_drawdown_limit_pct": 2.0})
+
+    def test_zero_trade_strategy_is_rejected_not_errored(self):
+        """A strategy that never traded is a measured fact, and it is not a pass.
+
+        The alpha_spec shipped in this repo produces exactly zero entries on
+        five years of real Bybit spot candles (see research/RESULT_P0-1.md),
+        and the pipeline certified it PASSED with risk_of_ruin 0.0.
+        """
+        validator = QuantValidator()
+        metrics = {"total_trades": 0, "sharpe_ratio": None,
+                   "max_drawdown": None, "profit_factor": None}
+        assert validator.validate_metrics(metrics, {"max_drawdown_limit_pct": 2.0}) is False
 
     # --- run_monte_carlo determinism / seed ---
 
